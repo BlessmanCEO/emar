@@ -1,0 +1,66 @@
+# Dockerfile for building rust_core Android libraries
+FROM rust:1.85-slim-bookworm AS builder
+
+# Install Android NDK dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    unzip \
+    gcc \
+    g++ \
+    make \
+    libssl-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Android SDK/NDK
+ENV ANDROID_SDK_ROOT=/opt/android-sdk
+ENV ANDROID_NDK_VERSION=27.0.12077973
+ENV ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION
+ENV PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
+
+# Download and install Android SDK command line tools
+RUN mkdir -p $ANDROID_SDK_ROOT/cmdline-tools && \
+    cd $ANDROID_SDK_ROOT/cmdline-tools && \
+    curl -o commandlinetools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip && \
+    unzip commandlinetools.zip && \
+    mv cmdline-tools latest && \
+    rm commandlinetools.zip
+
+# Accept licenses and install NDK
+RUN yes | sdkmanager --licenses && \
+    sdkmanager "ndk;$ANDROID_NDK_VERSION" "platform-tools"
+
+# Install Rust Android targets
+RUN rustup target add \
+    aarch64-linux-android \
+    armv7-linux-androideabi \
+    x86_64-linux-android \
+    i686-linux-android
+
+# Install cargo-ndk
+RUN cargo install cargo-ndk
+
+# Set workdir
+WORKDIR /app
+
+# Copy Cargo files first for better caching
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir -p src && echo "fn main() {}" > src/lib.rs
+RUN cargo fetch
+
+# Copy source code
+COPY src ./src
+
+# Build for Android architectures
+ENV ANDROID_NDK_HOME=$ANDROID_NDK_ROOT
+RUN cargo ndk \
+    -t armeabi-v7a \
+    -t arm64-v8a \
+    -t x86_64 \
+    -t x86 \
+    -o /output \
+    build --release
+
+# Final stage - just copy the outputs
+FROM scratch AS export
+COPY --from=builder /output /
