@@ -1,14 +1,14 @@
 class LoginRequest {
   LoginRequest({
     required this.username,
-    required this.password,
+    required this.pin,
   });
 
   final String username;
-  final String password;
+  final String pin;
 
   Map<String, dynamic> toJson() => {
         'username': username,
-        'password': password,
+        'pin': pin,
       };
 }

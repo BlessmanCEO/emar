@@ -6,7 +6,7 @@
   - REST endpoints: `/auth/login`, `/auth/refresh`, `/sync/push`, `/sync/pull`, `/bootstrap`.
   - JWT auth + refresh tokens.
   - Event store schema + projections tables migration (`audit_events`, `users`, `devices`, `refresh_tokens`, `residents`, `medication_orders`, `mar_entries`, `administrations`).
-  - CLI to create users with Argon2 password hashing.
+- CLI to create staff users with Argon2 PIN hashing.
   - Dockerized with PostgreSQL and backend containers.
 
 - **Rust core (shared logic)**
@@ -24,7 +24,7 @@
 
 - FRB on web needs cross-origin headers if you want shared buffers. Current warning is expected on Chrome.
 - `rust_core` uses `#![allow(unexpected_cfgs)]` to silence macro cfg warnings.
-- `AuthUser` fields `user_id` and `roles` are unused for now; warning suppressed.
+- `AuthUser` carries `user_id` and `org_id` from access token claims.
 
 ## Docker Compose Services
 
@@ -48,17 +48,17 @@ cd server
 sqlx migrate run
 ```
 
-### Create a user:
+### Create a staff user:
 ```bash
 cd server
-cargo run --bin create_user -- --email nurse@example.com --password "ChangeMe123" --org-id "550e8400-e29b-41d4-a716-446655440000" --roles nurse
+cargo run --bin create_user -- --username nurse@example.com --pin "1234" --org-id "550e8400-e29b-41d4-a716-446655440000" --first-name "Nurse" --last-name "One" --role nurse
 ```
 
 ### Test login:
 ```bash
 curl -s http://localhost:8080/auth/login -X POST \
   -H "Content-Type: application/json" \
-  -d '{"email":"nurse@example.com","password":"ChangeMe123"}'
+  -d '{"username":"nurse@example.com","pin":"1234"}'
 ```
 
 ## What still needs doing

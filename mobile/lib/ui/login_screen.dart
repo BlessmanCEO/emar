@@ -17,7 +17,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _pinController = TextEditingController();
   final _baseUrlController = TextEditingController(text: 'http://10.0.2.2:8080');
   bool _loading = false;
   String _error = '';
@@ -46,8 +46,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    if (_usernameController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
-      setState(() => _error = 'Please enter username and password');
+    if (_usernameController.text.trim().isEmpty || _pinController.text.trim().isEmpty) {
+      setState(() => _error = 'Please enter username and PIN');
       return;
     }
 
@@ -59,7 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final request = LoginRequest(
         username: _usernameController.text.trim(),
-        password: _passwordController.text.trim(),
+        pin: _pinController.text.trim(),
       );
       await _authService.login(request);
       _navigateToHome();
@@ -80,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void dispose() {
     _usernameController.dispose();
-    _passwordController.dispose();
+    _pinController.dispose();
     _baseUrlController.dispose();
     super.dispose();
   }
@@ -148,10 +148,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
                   TextField(
-                    controller: _passwordController,
+                    controller: _pinController,
                     obscureText: true,
                     decoration: InputDecoration(
-                      labelText: 'Password',
+                      labelText: 'PIN',
                       filled: true,
                       fillColor: const Color(0xFFF4F6F7),
                       border: OutlineInputBorder(
