@@ -11,3 +11,8 @@ George Best: Refused: On Feb 12th, he refuses his lunch dose, and on Feb 14th, h
 Skipped: On Feb 13th, the evening round is skipped entirely (marked as "Social Leave").
 
 -------------------
+
+Emmeline Pankhurt: all dinner medication refused. 
+
+------------------
+
