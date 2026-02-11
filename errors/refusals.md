@@ -1,4 +1,4 @@
-Ethel Beavers: Refused all medication on 12th, 14th, and 16th
+Ethel Beavers: Refused all medication on 13th, 14th, and 16th
 
 ---------------
 
