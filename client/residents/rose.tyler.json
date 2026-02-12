@@ -1,0 +1,13 @@
+{
+  "nhsNumber": "2233445566",
+  "name": { "prefix": "Ms.", "given": ["Rose"], "family": "Tyler" },
+  "dateOfBirth": "1949-01-10",
+  "gender": "female",
+  "careSetting": "Nursing Home",
+  "address": { "line1": "123 Willow Lane", "line2": "Flat 6D", "city": "Manchester", "postcode": "M14 7AL" },
+  "weight": 68.9,
+  "allergies": "No known allergies",
+  "rawPreferences": ["Split scored tablets in half", "Take evening meds with cocoa"],
+  "gpDetails": { "name": "Dr. Elizabeth Thorne", "code": "P84001" },
+  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-10240-G", "receivedAt": "2026-02-10T19:30:00Z" }
+}

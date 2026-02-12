@@ -1,0 +1,13 @@
+{
+  "nhsNumber": "1122334455",
+  "name": { "prefix": "Mr.", "given": ["Stanley"], "family": "Hudson" },
+  "dateOfBirth": "1954-11-02",
+  "gender": "male",
+  "careSetting": "Nursing Home",
+  "address": { "line1": "123 Willow Lane", "line2": "Suite 12", "city": "Manchester", "postcode": "M14 7AL" },
+  "weight": 95.2,
+  "allergies": "No known allergies",
+  "rawPreferences": ["Take with food to prevent nausea", "Do not crush enteric coated tablets"],
+  "gpDetails": { "name": "Dr. Elizabeth Thorne", "code": "P84001" },
+  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-10237-D", "receivedAt": "2026-02-10T19:15:00Z" }
+}

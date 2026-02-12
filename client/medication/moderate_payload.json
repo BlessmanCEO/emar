@@ -1,0 +1,123 @@
+[
+  {
+    "nhsNumber": "2233445566",
+    "name": { "prefix": "Ms.", "given": ["Rose"], "family": "Tyler" },
+    "medications": [
+      { "name": "Salbutamol Inhaler", "vendorDrugId": "DRUG-RT-01", "rawStrength": "100mcg", "dose": "2 puffs", "prn": true, "route": "Inhaled", "instructions": "As needed for shortness of breath.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-RT-01" } },
+      { "name": "Sertraline", "vendorDrugId": "DRUG-RT-02", "rawStrength": "50mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Take one in the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-RT-02" } },
+      { "name": "Paracetamol", "vendorDrugId": "DRUG-RT-03", "rawStrength": "500mg", "dose": "1-2 tablets", "prn": true, "route": "Oral", "instructions": "Every 4-6 hours for pain.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-RT-03" } },
+      { "name": "Multivitamin", "vendorDrugId": "DRUG-RT-04", "rawStrength": "Standard", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Take daily with breakfast.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-RT-04" } },
+      { "name": "Cetirizine", "vendorDrugId": "DRUG-RT-05", "rawStrength": "10mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Take one daily.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-RT-05" } },
+      { "name": "Omeprazole", "vendorDrugId": "DRUG-RT-06", "rawStrength": "20mg", "dose": "1 capsule", "prn": false, "route": "Oral", "instructions": "Take in the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-RT-06" } }
+    ]
+  },
+  {
+    "nhsNumber": "8899001122",
+    "name": { "prefix": "Mr.", "given": ["Winston"], "family": "Smith" },
+    "medications": [
+      { "name": "Salmeterol Inhaler", "vendorDrugId": "DRUG-WS-01", "rawStrength": "25mcg", "dose": "2 puffs", "prn": false, "route": "Inhaled", "instructions": "Twice daily (Morning and Night).", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-WS-01" } },
+      { "name": "Prednisolone", "vendorDrugId": "DRUG-WS-02", "rawStrength": "5mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Take in the morning with food.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-WS-02" } },
+      { "name": "Ramipril", "vendorDrugId": "DRUG-WS-03", "rawStrength": "5mg", "dose": "1 capsule", "prn": false, "route": "Oral", "instructions": "Take in the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-WS-03" } },
+      { "name": "Atorvastatin", "vendorDrugId": "DRUG-WS-04", "rawStrength": "40mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Take at night.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-WS-04" } },
+      { "name": "Gaviscon Liquid", "vendorDrugId": "DRUG-WS-05", "rawStrength": "10ml", "dose": "10-20ml", "prn": true, "route": "Oral", "instructions": "After meals and at bedtime.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-WS-05" } },
+      { "name": "Furosemide", "vendorDrugId": "DRUG-WS-06", "rawStrength": "40mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Take in the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-WS-06" } }
+    ]
+  },
+  {
+    "nhsNumber": "7766554433",
+    "name": { "prefix": "Mrs.", "given": ["Hyacinth"], "family": "Bucket" },
+    "medications": [
+      { "name": "Digoxin", "vendorDrugId": "DRUG-HB-01", "rawStrength": "125mcg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Once daily.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-HB-01" } },
+      { "name": "Adcal-D3", "vendorDrugId": "DRUG-HB-02", "rawStrength": "750mg/200iu", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Twice daily.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-HB-02" } },
+      { "name": "Warfarin", "vendorDrugId": "DRUG-HB-03", "rawStrength": "Variable", "dose": "1mg", "prn": false, "route": "Oral", "instructions": "Daily at 18:00.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-HB-03" } },
+      { "name": "Bisoprolol", "vendorDrugId": "DRUG-HB-04", "rawStrength": "2.5mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "In the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-HB-04" } },
+      { "name": "Lorazepam", "vendorDrugId": "DRUG-HB-05", "rawStrength": "0.5mg", "dose": "1 tablet", "prn": true, "route": "Oral", "instructions": "For anxiety.", "is_controlled_drug": true, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-HB-05" } },
+      { "name": "Lansoprazole", "vendorDrugId": "DRUG-HB-06", "rawStrength": "15mg", "dose": "1 capsule", "prn": false, "route": "Oral", "instructions": "Before breakfast.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-HB-06" } }
+    ]
+  },
+  {
+    "nhsNumber": "3034958271",
+    "name": { "prefix": "Mr.", "given": ["George"], "family": "Best" },
+    "medications": [
+      { "name": "Thiamine", "vendorDrugId": "DRUG-GB-01", "rawStrength": "100mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Three times daily.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-GB-01" } },
+      { "name": "Vitamin B Co-strong", "vendorDrugId": "DRUG-GB-02", "rawStrength": "Standard", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Twice daily.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-GB-02" } },
+      { "name": "Spironolactone", "vendorDrugId": "DRUG-GB-03", "rawStrength": "25mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "In the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-GB-03" } },
+      { "name": "Lactulose", "vendorDrugId": "DRUG-GB-04", "rawStrength": "15ml", "dose": "15ml", "prn": false, "route": "Oral", "instructions": "Twice daily.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-GB-04" } },
+      { "name": "Omeprazole", "vendorDrugId": "DRUG-GB-05", "rawStrength": "20mg", "dose": "1 capsule", "prn": false, "route": "Oral", "instructions": "In the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-GB-05" } },
+      { "name": "Diazepam", "vendorDrugId": "DRUG-GB-06", "rawStrength": "2mg", "dose": "1 tablet", "prn": true, "route": "Oral", "instructions": "For muscle spasms.", "is_controlled_drug": true, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-GB-06" } }
+    ]
+  },
+  {
+    "nhsNumber": "8273645190",
+    "name": { "prefix": "Mrs.", "given": ["Vera"], "family": "Lyn" },
+    "medications": [
+      { "name": "Naproxen", "vendorDrugId": "DRUG-VL-01", "rawStrength": "250mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Twice daily with food.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-VL-01" } },
+      { "name": "Lansoprazole", "vendorDrugId": "DRUG-VL-02", "rawStrength": "15mg", "dose": "1 capsule", "prn": false, "route": "Oral", "instructions": "Before breakfast.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-VL-02" } },
+      { "name": "Clopidogrel", "vendorDrugId": "DRUG-VL-03", "rawStrength": "75mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "In the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-VL-03" } },
+      { "name": "Latanoprost", "vendorDrugId": "DRUG-VL-04", "rawStrength": "50mcg/ml", "dose": "1 drop", "prn": false, "route": "Ophthalmic", "instructions": "One drop in each eye at night.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-VL-04" } },
+      { "name": "Vitamin D", "vendorDrugId": "DRUG-VL-05", "rawStrength": "1000iu", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Daily in the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-VL-05" } },
+      { "name": "Co-codamol", "vendorDrugId": "DRUG-VL-06", "rawStrength": "8/500mg", "dose": "2 tablets", "prn": true, "route": "Oral", "instructions": "For breakthrough pain.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-VL-06" } }
+    ]
+  },
+  {
+    "nhsNumber": "1928374650",
+    "name": { "prefix": "Mr.", "given": ["Alan"], "family": "Turing" },
+    "medications": [
+      { "name": "Metformin", "vendorDrugId": "DRUG-AT-01", "rawStrength": "500mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Twice daily with meals.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-AT-01" } },
+      { "name": "Gliclazide", "vendorDrugId": "DRUG-AT-02", "rawStrength": "80mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "With breakfast.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-AT-02" } },
+      { "name": "Lisinopril", "vendorDrugId": "DRUG-AT-03", "rawStrength": "10mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "In the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-AT-03" } },
+      { "name": "Donepezil", "vendorDrugId": "DRUG-AT-04", "rawStrength": "10mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "At bedtime.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-AT-04" } },
+      { "name": "Aspirin", "vendorDrugId": "DRUG-AT-05", "rawStrength": "75mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Daily with food.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-AT-05" } },
+      { "name": "Simvastatin", "vendorDrugId": "DRUG-AT-06", "rawStrength": "20mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "At night.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-AT-06" } },
+      { "name": "Senna", "vendorDrugId": "DRUG-AT-07", "rawStrength": "7.5mg", "dose": "2 tablets", "prn": true, "route": "Oral", "instructions": "At night if required.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-AT-07" } }
+    ]
+  },
+  {
+    "nhsNumber": "5544332211",
+    "name": { "prefix": "Mrs.", "given": ["Emmeline"], "family": "Pankhurst" },
+    "medications": [
+      { "name": "Gabapentin", "vendorDrugId": "DRUG-EP-01", "rawStrength": "300mg", "dose": "1 capsule", "prn": false, "route": "Oral", "instructions": "Three times daily.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-EP-01" } },
+      { "name": "Omeprazole", "vendorDrugId": "DRUG-EP-02", "rawStrength": "20mg", "dose": "1 capsule", "prn": false, "route": "Oral", "instructions": "In the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-EP-02" } },
+      { "name": "Rivaroxaban", "vendorDrugId": "DRUG-EP-03", "rawStrength": "20mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "With evening meal.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-EP-03" } },
+      { "name": "Folic Acid", "vendorDrugId": "DRUG-EP-04", "rawStrength": "5mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Once daily.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-EP-04" } },
+      { "name": "Ferrous Fumarate", "vendorDrugId": "DRUG-EP-05", "rawStrength": "210mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Twice daily.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-EP-05" } },
+      { "name": "Paracetamol", "vendorDrugId": "DRUG-EP-06", "rawStrength": "500mg", "dose": "1-2 tablets", "prn": true, "route": "Oral", "instructions": "Every 4 hours as required.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-EP-06" } }
+    ]
+  },
+  {
+    "nhsNumber": "9988776655",
+    "name": { "prefix": "Mr.", "given": ["Noel"], "family": "Gallagher" },
+    "medications": [
+      { "name": "Loratadine", "vendorDrugId": "DRUG-NG-01", "rawStrength": "10mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Once daily.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-NG-01" } },
+      { "name": "Famotidine", "vendorDrugId": "DRUG-NG-02", "rawStrength": "20mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Twice daily.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-NG-02" } },
+      { "name": "Ibuprofen", "vendorDrugId": "DRUG-NG-03", "rawStrength": "200mg", "dose": "1-2 tablets", "prn": true, "route": "Oral", "instructions": "With food for pain.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-NG-03" } },
+      { "name": "Glucosamine Sulfate", "vendorDrugId": "DRUG-NG-04", "rawStrength": "1500mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Daily in the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-NG-04" } },
+      { "name": "Macrogol Sachet", "vendorDrugId": "DRUG-NG-05", "rawStrength": "13.1g", "dose": "1 sachet", "prn": true, "route": "Oral", "instructions": "Dissolve in water for constipation.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-NG-05" } }
+    ]
+  },
+  {
+    "nhsNumber": "1212123434",
+    "name": { "prefix": "Mrs.", "given": ["Elise"], "family": "Tanner" },
+    "medications": [
+      { "name": "Zopiclone", "vendorDrugId": "DRUG-ET-01", "rawStrength": "7.5mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "At bedtime.", "is_controlled_drug": true, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-ET-01" } },
+      { "name": "Levothyroxine", "vendorDrugId": "DRUG-ET-02", "rawStrength": "100mcg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "In the morning on an empty stomach.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-ET-02" } },
+      { "name": "Losartan", "vendorDrugId": "DRUG-ET-03", "rawStrength": "50mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "In the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-ET-03" } },
+      { "name": "Atorvastatin", "vendorDrugId": "DRUG-ET-04", "rawStrength": "20mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "At night.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-ET-04" } },
+      { "name": "Calceos", "vendorDrugId": "DRUG-ET-05", "rawStrength": "Standard", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Twice daily.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-ET-05" } },
+      { "name": "Paracetamol", "vendorDrugId": "DRUG-ET-06", "rawStrength": "500mg", "dose": "1-2 tablets", "prn": true, "route": "Oral", "instructions": "Every 4 hours for pain.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-ET-06" } }
+    ]
+  },
+  {
+    "nhsNumber": "4545676789",
+    "name": { "prefix": "Mr.", "given": ["Liam"], "family": "Cunningham" },
+    "medications": [
+      { "name": "Naproxen", "vendorDrugId": "DRUG-LC-01", "rawStrength": "500mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Twice daily with food.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-LC-01" } },
+      { "name": "Omeprazole", "vendorDrugId": "DRUG-LC-02", "rawStrength": "20mg", "dose": "1 capsule", "prn": false, "route": "Oral", "instructions": "In the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-LC-02" } },
+      { "name": "Atenolol", "vendorDrugId": "DRUG-LC-03", "rawStrength": "50mg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "In the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-LC-03" } },
+      { "name": "Vitamin B12", "vendorDrugId": "DRUG-LC-04", "rawStrength": "1000mcg", "dose": "1 tablet", "prn": false, "route": "Oral", "instructions": "Daily in the morning.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-LC-04" } },
+      { "name": "Cod Liver Oil", "vendorDrugId": "DRUG-LC-05", "rawStrength": "1000mg", "dose": "1 capsule", "prn": false, "route": "Oral", "instructions": "Once daily.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-LC-05" } },
+      { "name": "Co-codamol", "vendorDrugId": "DRUG-LC-06", "rawStrength": "30/500mg", "dose": "2 tablets", "prn": true, "route": "Oral", "instructions": "Every 6 hours for severe pain.", "is_controlled_drug": false, "metadata": { "sourceVendor": "emar.link", "externalId": "RX-LC-06" } }
+    ]
+  }
+]
+

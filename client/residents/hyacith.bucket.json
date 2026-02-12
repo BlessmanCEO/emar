@@ -1,0 +1,13 @@
+{
+  "nhsNumber": "7766554433",
+  "name": { "prefix": "Mrs.", "given": ["Hyacinth"], "family": "Bucket" },
+  "dateOfBirth": "1945-09-21",
+  "gender": "female",
+  "careSetting": "Nursing Home",
+  "address": { "line1": "123 Willow Lane", "line2": "Annex 1", "city": "Manchester", "postcode": "M14 7AL" },
+  "weight": 64.5,
+  "allergies": "Strawberries",
+  "rawPreferences": ["Sparkling water only for pills", "Do not touch pills with bare hands"],
+  "gpDetails": { "name": "Dr. Elizabeth Thorne", "code": "P84001" },
+  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-10242-I", "receivedAt": "2026-02-10T19:40:00Z" }
+}

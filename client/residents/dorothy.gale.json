@@ -1,0 +1,13 @@
+{
+  "nhsNumber": "9928374651",
+  "name": { "prefix": "Ms.", "given": ["Dorothy"], "family": "Gale" },
+  "dateOfBirth": "1931-08-14",
+  "gender": "female",
+  "careSetting": "Nursing Home",
+  "address": { "line1": "123 Willow Lane", "line2": "Room 5", "city": "Manchester", "postcode": "M14 7AL" },
+  "weight": 55.8,
+  "allergies": "No known allergies",
+  "rawPreferences": ["Requires thickened fluids for swallowing meds", "Must sit upright for 30 mins post-admin"],
+  "gpDetails": { "name": "Dr. Elizabeth Thorne", "code": "P84001" },
+  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-10236-C", "receivedAt": "2026-02-10T19:10:00Z" }
+}

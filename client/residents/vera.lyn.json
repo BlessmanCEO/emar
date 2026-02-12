@@ -1,0 +1,13 @@
+{
+  "nhsNumber": "8273645190",
+  "name": { "prefix": "Mrs.", "given": ["Vera"], "family": "Lynn" },
+  "dateOfBirth": "1927-03-20",
+  "gender": "female",
+  "careSetting": "Nursing Home",
+  "address": { "line1": "88 Deansgate", "line2": "Floor 2, Apt 4", "city": "Manchester", "postcode": "M3 2ER" },
+  "weight": 58.2,
+  "allergies": "No known allergies",
+  "rawPreferences": ["Cannot swallow large capsules", "Take one pill at a time"],
+  "gpDetails": { "name": "Dr. Sarah Jenkins", "code": "P84055" },
+  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-20002-Y", "receivedAt": "2026-02-11T08:15:00Z" }
+}

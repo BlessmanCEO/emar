@@ -1,0 +1,13 @@
+{
+  "nhsNumber": "3034958271",
+  "name": { "prefix": "Mr.", "given": ["George"], "family": "Best" },
+  "dateOfBirth": "1946-05-22",
+  "gender": "male",
+  "careSetting": "Nursing Home",
+  "address": { "line1": "45 Oak Road", "line2": "Room 101", "city": "Manchester", "postcode": "M20 2QW" },
+  "weight": 72.0,
+  "allergies": "No known allergies",
+  "rawPreferences": ["Monitor for cheeking/hoarding", "Take with orange juice"],
+  "gpDetails": { "name": "Dr. Marcus Welby", "code": "P84022" },
+  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-20001-Z", "receivedAt": "2026-02-11T08:00:00Z" }
+}

@@ -1,0 +1,13 @@
+{
+  "nhsNumber": "5544332211",
+  "name": { "prefix": "Ms.", "given": ["Emmeline"], "family": "Pankhurst" },
+  "dateOfBirth": "1940-07-15",
+  "gender": "female",
+  "careSetting": "Nursing Home",
+  "address": { "line1": "74 Rusholme Grove", "line2": "Room 2", "city": "Manchester", "postcode": "M14 5RT" },
+  "weight": 61.4,
+  "allergies": "No known allergies",
+  "rawPreferences": ["Self-administers with supervision", "Prefer morning meds before 08:00"],
+  "gpDetails": { "name": "Dr. Elizabeth Thorne", "code": "P84001" },
+  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-20004-W", "receivedAt": "2026-02-11T08:45:00Z" }
+}

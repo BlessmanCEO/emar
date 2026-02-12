@@ -1,0 +1,13 @@
+{
+  "nhsNumber": "9988776655",
+  "name": { "prefix": "Mr.", "given": ["Noel"], "family": "Gallagher" },
+  "dateOfBirth": "1952-05-29",
+  "gender": "male",
+  "careSetting": "Nursing Home",
+  "address": { "line1": "19 Oxford Road", "line2": "Apt 501", "city": "Manchester", "postcode": "M1 7DU" },
+  "weight": 80.1,
+  "allergies": "No known allergies",
+  "rawPreferences": ["Prefers syrup/liquid format if available", "No meds before morning coffee"],
+  "gpDetails": { "name": "Dr. Sarah Jenkins", "code": "P84055" },
+  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-20005-V", "receivedAt": "2026-02-11T09:00:00Z" }
+}

@@ -1,0 +1,204 @@
+[
+  {
+    "nhsNumber": "5928314402",
+    "name": { "prefix": "Mrs.", "given": ["Margret"], "family": "Thatcher" },
+    "medications": [
+      {
+        "name": "Amlodipine",
+        "vendorDrugId": "DRUG-MT-001",
+        "rawStrength": "5mg",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one in the morning for blood pressure.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-MT-01" }
+      },
+      {
+        "name": "Atorvastatin",
+        "vendorDrugId": "DRUG-MT-002",
+        "rawStrength": "20mg",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one at night.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-MT-02" }
+      }
+    ]
+  },
+  {
+    "nhsNumber": "3829910045",
+    "name": { "prefix": "Mr.", "given": ["Reginald"], "family": "Dwight" },
+    "medications": [
+      {
+        "name": "Ramipril",
+        "vendorDrugId": "DRUG-RD-001",
+        "rawStrength": "2.5mg",
+        "dose": "1 capsule",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one daily in the morning.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-RD-01" }
+      },
+      {
+        "name": "Simvastatin",
+        "vendorDrugId": "DRUG-RD-002",
+        "rawStrength": "40mg",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one at bedtime.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-RD-02" }
+      },
+      {
+        "name": "Paracetamol",
+        "vendorDrugId": "DRUG-RD-003",
+        "rawStrength": "500mg",
+        "dose": "2 tablets",
+        "prn": true,
+        "route": "Oral",
+        "instructions": "Take every 4-6 hours as needed for pain.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-RD-03" }
+      }
+    ]
+  },
+  {
+    "nhsNumber": "9928374651",
+    "name": { "prefix": "Ms.", "given": ["Dorothy"], "family": "Gale" },
+    "medications": [
+      {
+        "name": "Levothyroxine",
+        "vendorDrugId": "DRUG-DG-001",
+        "rawStrength": "75mcg",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take in the morning on an empty stomach.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-DG-01" }
+      },
+      {
+        "name": "Colecalciferol",
+        "vendorDrugId": "DRUG-DG-002",
+        "rawStrength": "800 units",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one daily with water.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-DG-02" }
+      }
+    ]
+  },
+  {
+    "nhsNumber": "1122334455",
+    "name": { "prefix": "Mr.", "given": ["Stanley"], "family": "Hudson" },
+    "medications": [
+      {
+        "name": "Losartan",
+        "vendorDrugId": "DRUG-SH-001",
+        "rawStrength": "50mg",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one in the morning.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-SH-01" }
+      },
+      {
+        "name": "Aspirin",
+        "vendorDrugId": "DRUG-SH-002",
+        "rawStrength": "75mg",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one daily with food.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-SH-02" }
+      },
+      {
+        "name": "Metformin",
+        "vendorDrugId": "DRUG-SH-003",
+        "rawStrength": "500mg",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one twice daily (Breakfast and Evening meal).",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-SH-03" }
+      }
+    ]
+  },
+  {
+    "nhsNumber": "6677889900",
+    "name": { "prefix": "Mrs.", "given": ["Ethel"], "family": "Beavers" },
+    "medications": [
+      {
+        "name": "Bisoprolol",
+        "vendorDrugId": "DRUG-EB-001",
+        "rawStrength": "1.25mg",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one in the morning.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-EB-01" }
+      },
+      {
+        "name": "Omeprazole",
+        "vendorDrugId": "DRUG-EB-002",
+        "rawStrength": "20mg",
+        "dose": "1 capsule",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one in the morning 30 mins before food.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-EB-02" }
+      }
+    ]
+  },
+  {
+    "nhsNumber": "4455667788",
+    "name": { "prefix": "Mr.", "given": ["Albert"], "family": "Steptoe" },
+    "medications": [
+      {
+        "name": "Furosemide",
+        "vendorDrugId": "DRUG-AS-001",
+        "rawStrength": "20mg",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one in the morning.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-AS-01" }
+      },
+      {
+        "name": "Sando-K (Potassium)",
+        "vendorDrugId": "DRUG-AS-002",
+        "rawStrength": "470mg",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one daily in the morning.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-AS-02" }
+      },
+      {
+        "name": "Warfarin",
+        "vendorDrugId": "DRUG-AS-003",
+        "rawStrength": "Variable",
+        "dose": "3mg",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take once daily at 18:00.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-AS-03" }
+      }
+    ]
+  }
+]
+

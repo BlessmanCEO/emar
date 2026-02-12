@@ -1,0 +1,13 @@
+{
+  "nhsNumber": "3344556677",
+  "name": { "prefix": "Mr.", "given": ["Bernard"], "family": "Manning" },
+  "dateOfBirth": "1930-08-13",
+  "gender": "male",
+  "careSetting": "Nursing Home",
+  "address": { "line1": "101 Didsbury Park", "line2": "Suite 4", "city": "Manchester", "postcode": "M20 5WZ" },
+  "weight": 92.0,
+  "allergies": "No known allergies",
+  "rawPreferences": ["Refuses liquid medications", "Take with sweet tea"],
+  "gpDetails": { "name": "Dr. Marcus Welby", "code": "P84022" },
+  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-20009-R", "receivedAt": "2026-02-11T10:00:00Z" }
+}
