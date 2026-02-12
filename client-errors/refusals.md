@@ -16,3 +16,6 @@ Emmeline Pankhurt: all dinner medication refused.
 
 ------------------
 
+Stanley Hudson: Refusal of all medication on 16th and 17th
+
+------------

@@ -1,7 +1,9 @@
+BEGIN;
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL,
     username TEXT NOT NULL,
@@ -16,10 +18,10 @@ CREATE TABLE users (
     CONSTRAINT users_username_not_blank_chk CHECK (btrim(username) <> '')
 );
 
-CREATE UNIQUE INDEX users_username_lower_uidx ON users (LOWER(username));
-CREATE INDEX users_org_active_idx ON users (org_id) WHERE is_active = true;
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_uidx ON users (LOWER(username));
+CREATE INDEX IF NOT EXISTS users_org_active_idx ON users (org_id) WHERE is_active = true;
 
-CREATE TABLE refresh_tokens (
+CREATE TABLE IF NOT EXISTS refresh_tokens (
     token_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     token_hash TEXT NOT NULL UNIQUE,
@@ -28,10 +30,10 @@ CREATE TABLE refresh_tokens (
     revoked_at TIMESTAMPTZ
 );
 
-CREATE INDEX refresh_tokens_user_id_idx ON refresh_tokens (user_id);
-CREATE INDEX refresh_tokens_expires_active_idx ON refresh_tokens (expires_at) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS refresh_tokens_user_id_idx ON refresh_tokens (user_id);
+CREATE INDEX IF NOT EXISTS refresh_tokens_expires_active_idx ON refresh_tokens (expires_at) WHERE revoked_at IS NULL;
 
-CREATE TABLE devices (
+CREATE TABLE IF NOT EXISTS devices (
     device_id UUID PRIMARY KEY,
     org_id UUID NOT NULL,
     user_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
@@ -40,10 +42,10 @@ CREATE TABLE devices (
     revoked_at TIMESTAMPTZ
 );
 
-CREATE INDEX devices_org_id_idx ON devices (org_id);
-CREATE INDEX devices_user_id_idx ON devices (user_id);
+CREATE INDEX IF NOT EXISTS devices_org_id_idx ON devices (org_id);
+CREATE INDEX IF NOT EXISTS devices_user_id_idx ON devices (user_id);
 
-CREATE TABLE audit_events (
+CREATE TABLE IF NOT EXISTS audit_events (
     seq BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     event_id UUID NOT NULL UNIQUE,
     org_id UUID NOT NULL,
@@ -60,51 +62,64 @@ CREATE TABLE audit_events (
     CONSTRAINT audit_events_payload_object_chk CHECK (jsonb_typeof(payload) = 'object')
 );
 
-CREATE INDEX audit_events_org_seq_idx ON audit_events (org_id, seq);
-CREATE INDEX audit_events_org_occurred_idx ON audit_events (org_id, occurred_at DESC);
-CREATE INDEX audit_events_entity_idx ON audit_events (entity_type, entity_id);
-CREATE INDEX audit_events_occurred_idx ON audit_events (occurred_at);
-CREATE INDEX audit_events_actor_idx ON audit_events (actor_user_id);
-CREATE INDEX audit_events_device_idx ON audit_events (device_id);
+CREATE INDEX IF NOT EXISTS audit_events_org_seq_idx ON audit_events (org_id, seq);
+CREATE INDEX IF NOT EXISTS audit_events_org_occurred_idx ON audit_events (org_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS audit_events_entity_idx ON audit_events (entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS audit_events_occurred_idx ON audit_events (occurred_at);
+CREATE INDEX IF NOT EXISTS audit_events_actor_idx ON audit_events (actor_user_id);
+CREATE INDEX IF NOT EXISTS audit_events_device_idx ON audit_events (device_id);
 
-CREATE TABLE residents (
-    resident_id TEXT PRIMARY KEY,
-    org_id UUID NOT NULL,
-    nhs_number TEXT,
-    name_prefix TEXT,
-    first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL,
-    date_of_birth DATE,
-    gender TEXT,
-    care_setting TEXT,
-    address_line1 TEXT,
-    address_line2 TEXT,
-    address_city TEXT,
-    address_postcode TEXT,
-    weight_kg NUMERIC,
-    allergies TEXT,
-    raw_preferences TEXT[] NOT NULL DEFAULT '{}',
-    gp_name TEXT,
-    gp_code TEXT,
-    source_vendor TEXT,
-    source_external_id TEXT,
-    source_received_at TIMESTAMPTZ,
-    status TEXT NOT NULL DEFAULT 'active',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT residents_org_resident_uq UNIQUE (org_id, resident_id),
-    CONSTRAINT residents_name_not_blank_chk CHECK (btrim(first_name) <> '' AND btrim(last_name) <> ''),
-    CONSTRAINT residents_nhs_number_format_chk CHECK (nhs_number IS NULL OR nhs_number ~ '^[0-9]{10}$'),
-    CONSTRAINT residents_weight_kg_chk CHECK (weight_kg IS NULL OR weight_kg > 0),
-    CONSTRAINT residents_status_chk CHECK (status IN ('active', 'inactive', 'discharged', 'deceased'))
-);
+ALTER TABLE residents
+    ADD COLUMN IF NOT EXISTS org_id UUID,
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
-CREATE UNIQUE INDEX residents_org_nhs_number_uidx ON residents (org_id, nhs_number) WHERE nhs_number IS NOT NULL;
-CREATE INDEX residents_org_name_idx ON residents (org_id, last_name, first_name);
-CREATE INDEX residents_source_external_idx ON residents (org_id, source_vendor, source_external_id);
-CREATE INDEX residents_raw_preferences_gin_idx ON residents USING GIN (raw_preferences);
+UPDATE residents
+SET org_id = '00000000-0000-0000-0000-000000000001'::uuid
+WHERE org_id IS NULL;
 
-CREATE TABLE medication_orders (
+UPDATE residents
+SET created_at = COALESCE(updated_at, now())
+WHERE created_at IS NULL;
+
+ALTER TABLE residents
+    ALTER COLUMN org_id SET NOT NULL,
+    ALTER COLUMN updated_at SET DEFAULT now(),
+    ALTER COLUMN created_at SET DEFAULT now();
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'residents_org_resident_uq') THEN
+        ALTER TABLE residents
+            ADD CONSTRAINT residents_org_resident_uq UNIQUE (org_id, resident_id);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'residents_name_not_blank_chk') THEN
+        ALTER TABLE residents
+            ADD CONSTRAINT residents_name_not_blank_chk CHECK (btrim(first_name) <> '' AND btrim(last_name) <> '');
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'residents_nhs_number_format_chk') THEN
+        ALTER TABLE residents
+            ADD CONSTRAINT residents_nhs_number_format_chk CHECK (nhs_number IS NULL OR nhs_number ~ '^[0-9]{10}$');
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'residents_weight_kg_chk') THEN
+        ALTER TABLE residents
+            ADD CONSTRAINT residents_weight_kg_chk CHECK (weight_kg IS NULL OR weight_kg > 0);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'residents_status_chk') THEN
+        ALTER TABLE residents
+            ADD CONSTRAINT residents_status_chk CHECK (status IN ('active', 'inactive', 'discharged', 'deceased'));
+    END IF;
+END$$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS residents_org_nhs_number_uidx ON residents (org_id, nhs_number) WHERE nhs_number IS NOT NULL;
+CREATE INDEX IF NOT EXISTS residents_org_name_idx ON residents (org_id, last_name, first_name);
+CREATE INDEX IF NOT EXISTS residents_source_external_idx ON residents (org_id, source_vendor, source_external_id);
+CREATE INDEX IF NOT EXISTS residents_raw_preferences_gin_idx ON residents USING GIN (raw_preferences);
+
+CREATE TABLE IF NOT EXISTS medication_orders (
     order_id TEXT PRIMARY KEY,
     org_id UUID NOT NULL,
     resident_id TEXT NOT NULL,
@@ -136,13 +151,13 @@ CREATE TABLE medication_orders (
     CONSTRAINT medication_orders_status_chk CHECK (status IN ('active', 'on_hold', 'discontinued', 'completed'))
 );
 
-CREATE UNIQUE INDEX medication_orders_source_external_uidx
+CREATE UNIQUE INDEX IF NOT EXISTS medication_orders_source_external_uidx
     ON medication_orders (org_id, source_vendor, source_external_id)
     WHERE source_vendor IS NOT NULL AND source_external_id IS NOT NULL;
-CREATE INDEX medication_orders_org_resident_status_idx ON medication_orders (org_id, resident_id, status);
-CREATE INDEX medication_orders_org_vendor_drug_idx ON medication_orders (org_id, vendor_drug_id);
+CREATE INDEX IF NOT EXISTS medication_orders_org_resident_status_idx ON medication_orders (org_id, resident_id, status);
+CREATE INDEX IF NOT EXISTS medication_orders_org_vendor_drug_idx ON medication_orders (org_id, vendor_drug_id);
 
-CREATE TABLE mar_entries (
+CREATE TABLE IF NOT EXISTS mar_entries (
     mar_entry_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL,
     resident_id TEXT NOT NULL,
@@ -161,11 +176,11 @@ CREATE TABLE mar_entries (
     CONSTRAINT mar_entries_status_chk CHECK (status IN ('scheduled', 'administered', 'missed', 'omitted', 'refused'))
 );
 
-CREATE INDEX mar_entries_org_scheduled_status_idx ON mar_entries (org_id, scheduled_at, status);
-CREATE INDEX mar_entries_org_order_idx ON mar_entries (org_id, order_id);
-CREATE INDEX mar_entries_org_resident_idx ON mar_entries (org_id, resident_id);
+CREATE INDEX IF NOT EXISTS mar_entries_org_scheduled_status_idx ON mar_entries (org_id, scheduled_at, status);
+CREATE INDEX IF NOT EXISTS mar_entries_org_order_idx ON mar_entries (org_id, order_id);
+CREATE INDEX IF NOT EXISTS mar_entries_org_resident_idx ON mar_entries (org_id, resident_id);
 
-CREATE TABLE administrations (
+CREATE TABLE IF NOT EXISTS administrations (
     administration_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL,
     resident_id TEXT NOT NULL,
@@ -189,7 +204,9 @@ CREATE TABLE administrations (
     CONSTRAINT administrations_status_chk CHECK (status IN ('given', 'omitted', 'refused', 'delayed', 'error'))
 );
 
-CREATE INDEX administrations_org_administered_idx ON administrations (org_id, administered_at DESC);
-CREATE INDEX administrations_org_resident_administered_idx ON administrations (org_id, resident_id, administered_at DESC);
-CREATE INDEX administrations_org_order_idx ON administrations (org_id, order_id);
-CREATE INDEX administrations_org_mar_entry_idx ON administrations (org_id, mar_entry_id);
+CREATE INDEX IF NOT EXISTS administrations_org_administered_idx ON administrations (org_id, administered_at DESC);
+CREATE INDEX IF NOT EXISTS administrations_org_resident_administered_idx ON administrations (org_id, resident_id, administered_at DESC);
+CREATE INDEX IF NOT EXISTS administrations_org_order_idx ON administrations (org_id, order_id);
+CREATE INDEX IF NOT EXISTS administrations_org_mar_entry_idx ON administrations (org_id, mar_entry_id);
+
+COMMIT;
