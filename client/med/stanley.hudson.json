@@ -1,0 +1,39 @@
+{
+    "nhsNumber": "1122334455",
+    "name": { "prefix": "Mr.", "given": ["Stanley"], "family": "Hudson" },
+    "medications": [
+      {
+        "name": "Losartan",
+        "vendorDrugId": "DRUG-SH-001",
+        "rawStrength": "50mg",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one in the morning.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-SH-01" }
+      },
+      {
+        "name": "Aspirin",
+        "vendorDrugId": "DRUG-SH-002",
+        "rawStrength": "75mg",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one daily with food.",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-SH-02" }
+      },
+      {
+        "name": "Metformin",
+        "vendorDrugId": "DRUG-SH-003",
+        "rawStrength": "500mg",
+        "dose": "1 tablet",
+        "prn": false,
+        "route": "Oral",
+        "instructions": "Take one twice daily (Breakfast and Evening meal).",
+        "is_controlled_drug": false,
+        "metadata": { "sourceVendor": "emar.link", "externalId": "RX-SH-03" }
+      }
+    ]
+  }
