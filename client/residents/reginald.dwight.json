@@ -1,13 +1,35 @@
 {
   "nhsNumber": "3829910045",
-  "name": { "prefix": "Mr.", "given": ["Reginald"], "family": "Dwight" },
+  "resident_id": "RD-19420325",
+  "name": {
+    "prefix": "Mr.",
+    "given": [
+      "Reginald"
+    ],
+    "family": "Dwight"
+  },
   "dateOfBirth": "1942-03-25",
   "gender": "male",
   "careSetting": "Nursing Home",
-  "address": { "line1": "123 Willow Lane", "line2": "Flat 2C", "city": "Manchester", "postcode": "M14 7AL" },
+  "address": {
+    "line1": "123 Willow Lane",
+    "line2": "Flat 2C",
+    "city": "Manchester",
+    "postcode": "M14 7AL"
+  },
   "weight": 84.3,
   "allergies": "Peanuts",
-  "rawPreferences": ["Liquid formulations preferred over large tablets", "Requires a full glass of water"],
-  "gpDetails": { "name": "Dr. Elizabeth Thorne", "code": "P84001" },
-  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-10235-B", "receivedAt": "2026-02-10T19:05:00Z" }
+  "rawPreferences": [
+    "Liquid formulations preferred over large tablets",
+    "Requires a full glass of water"
+  ],
+  "gpDetails": {
+    "name": "Dr. Elizabeth Thorne",
+    "code": "P84001"
+  },
+  "metadata": {
+    "sourceVendor": "emar.link",
+    "externalId": "RES-10235-B",
+    "receivedAt": "2026-02-10T19:05:00Z"
+  }
 }

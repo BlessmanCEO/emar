@@ -53,11 +53,27 @@ CREATE INDEX audit_events_entity_idx ON audit_events (entity_type, entity_id);
 CREATE INDEX audit_events_occurred_idx ON audit_events (occurred_at);
 
 CREATE TABLE residents (
-    resident_id UUID PRIMARY KEY,
+    resident_id TEXT PRIMARY KEY,
     org_id UUID NOT NULL,
+    nhs_number TEXT,
+    name_prefix TEXT,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     date_of_birth DATE,
+    gender TEXT,
+    care_setting TEXT,
+    address_line1 TEXT,
+    address_line2 TEXT,
+    address_city TEXT,
+    address_postcode TEXT,
+    weight_kg NUMERIC,
+    allergies TEXT,
+    raw_preferences TEXT[] NOT NULL DEFAULT '{}',
+    gp_name TEXT,
+    gp_code TEXT,
+    source_vendor TEXT,
+    source_external_id TEXT,
+    source_received_at TIMESTAMPTZ,
     status TEXT NOT NULL DEFAULT 'active',
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -65,7 +81,7 @@ CREATE TABLE residents (
 CREATE TABLE medication_orders (
     order_id UUID PRIMARY KEY,
     org_id UUID NOT NULL,
-    resident_id UUID NOT NULL,
+    resident_id TEXT NOT NULL,
     medication_name TEXT NOT NULL,
     dose_value NUMERIC,
     dose_unit TEXT,
@@ -80,7 +96,7 @@ CREATE TABLE medication_orders (
 CREATE TABLE mar_entries (
     mar_entry_id UUID PRIMARY KEY,
     org_id UUID NOT NULL,
-    resident_id UUID NOT NULL,
+    resident_id TEXT NOT NULL,
     order_id UUID NOT NULL,
     scheduled_at TIMESTAMPTZ NOT NULL,
     status TEXT NOT NULL DEFAULT 'scheduled',
@@ -90,7 +106,7 @@ CREATE TABLE mar_entries (
 CREATE TABLE administrations (
     administration_id UUID PRIMARY KEY,
     org_id UUID NOT NULL,
-    resident_id UUID NOT NULL,
+    resident_id TEXT NOT NULL,
     order_id UUID NOT NULL,
     mar_entry_id UUID NOT NULL,
     administered_at TIMESTAMPTZ,

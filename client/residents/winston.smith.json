@@ -1,13 +1,35 @@
 {
   "nhsNumber": "8899001122",
-  "name": { "prefix": "Mr.", "given": ["Winston"], "family": "Smith" },
+  "resident_id": "WS-19390404",
+  "name": {
+    "prefix": "Mr.",
+    "given": [
+      "Winston"
+    ],
+    "family": "Smith"
+  },
   "dateOfBirth": "1939-04-04",
   "gender": "male",
   "careSetting": "Nursing Home",
-  "address": { "line1": "123 Willow Lane", "line2": "Flat 4A", "city": "Manchester", "postcode": "M14 7AL" },
+  "address": {
+    "line1": "123 Willow Lane",
+    "line2": "Flat 4A",
+    "city": "Manchester",
+    "postcode": "M14 7AL"
+  },
   "weight": 76.2,
   "allergies": "No known allergies",
-  "rawPreferences": ["Check mouth to ensure swallowing", "Needs verbal encouragement"],
-  "gpDetails": { "name": "Dr. Elizabeth Thorne", "code": "P84001" },
-  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-10241-H", "receivedAt": "2026-02-10T19:35:00Z" }
+  "rawPreferences": [
+    "Check mouth to ensure swallowing",
+    "Needs verbal encouragement"
+  ],
+  "gpDetails": {
+    "name": "Dr. Elizabeth Thorne",
+    "code": "P84001"
+  },
+  "metadata": {
+    "sourceVendor": "emar.link",
+    "externalId": "RES-10241-H",
+    "receivedAt": "2026-02-10T19:35:00Z"
+  }
 }

@@ -1,13 +1,35 @@
 {
   "nhsNumber": "1212123434",
-  "name": { "prefix": "Mrs.", "given": ["Elsie"], "family": "Tanner" },
+  "resident_id": "ET-19330214",
+  "name": {
+    "prefix": "Mrs.",
+    "given": [
+      "Elsie"
+    ],
+    "family": "Tanner"
+  },
   "dateOfBirth": "1933-02-14",
   "gender": "female",
   "careSetting": "Nursing Home",
-  "address": { "line1": "52 Spinningfields", "line2": "Penthouse B", "city": "Manchester", "postcode": "M3 3BE" },
+  "address": {
+    "line1": "52 Spinningfields",
+    "line2": "Penthouse B",
+    "city": "Manchester",
+    "postcode": "M3 3BE"
+  },
   "weight": 66.7,
   "allergies": "No known allergies",
-  "rawPreferences": ["Use thickening agent for water", "Requires seated position"],
-  "gpDetails": { "name": "Dr. Elizabeth Thorne", "code": "P84001" },
-  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-20006-U", "receivedAt": "2026-02-11T09:15:00Z" }
+  "rawPreferences": [
+    "Use thickening agent for water",
+    "Requires seated position"
+  ],
+  "gpDetails": {
+    "name": "Dr. Elizabeth Thorne",
+    "code": "P84001"
+  },
+  "metadata": {
+    "sourceVendor": "emar.link",
+    "externalId": "RES-20006-U",
+    "receivedAt": "2026-02-11T09:15:00Z"
+  }
 }

@@ -1,13 +1,36 @@
 {
   "nhsNumber": "5928314402",
-  "name": { "prefix": "Mrs.", "given": ["Margaret", "Anne"], "family": "Thatcher" },
+  "resident_id": "MAT-19350512",
+  "name": {
+    "prefix": "Mrs.",
+    "given": [
+      "Margaret",
+      "Anne"
+    ],
+    "family": "Thatcher"
+  },
   "dateOfBirth": "1935-05-12",
   "gender": "female",
   "careSetting": "Nursing Home",
-  "address": { "line1": "123 Willow Lane", "line2": "Flat 1A", "city": "Manchester", "postcode": "M14 7AL" },
+  "address": {
+    "line1": "123 Willow Lane",
+    "line2": "Flat 1A",
+    "city": "Manchester",
+    "postcode": "M14 7AL"
+  },
   "weight": 62.1,
   "allergies": "No known allergies",
-  "rawPreferences": ["Crush tablets and mix with yogurt", "Prefers to take medications after breakfast"],
-  "gpDetails": { "name": "Dr. Elizabeth Thorne", "code": "P84001" },
-  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-10234-A", "receivedAt": "2026-02-10T19:00:00Z" }
+  "rawPreferences": [
+    "Crush tablets and mix with yogurt",
+    "Prefers to take medications after breakfast"
+  ],
+  "gpDetails": {
+    "name": "Dr. Elizabeth Thorne",
+    "code": "P84001"
+  },
+  "metadata": {
+    "sourceVendor": "emar.link",
+    "externalId": "RES-10234-A",
+    "receivedAt": "2026-02-10T19:00:00Z"
+  }
 }

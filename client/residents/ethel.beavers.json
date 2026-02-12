@@ -1,13 +1,35 @@
 {
   "nhsNumber": "6677889900",
-  "name": { "prefix": "Mrs.", "given": ["Ethel"], "family": "Beavers" },
+  "resident_id": "EB-19281230",
+  "name": {
+    "prefix": "Mrs.",
+    "given": [
+      "Ethel"
+    ],
+    "family": "Beavers"
+  },
   "dateOfBirth": "1928-12-30",
   "gender": "female",
   "careSetting": "Nursing Home",
-  "address": { "line1": "123 Willow Lane", "line2": "Flat 3B", "city": "Manchester", "postcode": "M14 7AL" },
+  "address": {
+    "line1": "123 Willow Lane",
+    "line2": "Flat 3B",
+    "city": "Manchester",
+    "postcode": "M14 7AL"
+  },
   "weight": 50.4,
   "allergies": "Tree Pollen",
-  "rawPreferences": ["Place pills directly in hand, not in cup", "Warm water only"],
-  "gpDetails": { "name": "Dr. Elizabeth Thorne", "code": "P84001" },
-  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-10238-E", "receivedAt": "2026-02-10T19:20:00Z" }
+  "rawPreferences": [
+    "Place pills directly in hand, not in cup",
+    "Warm water only"
+  ],
+  "gpDetails": {
+    "name": "Dr. Elizabeth Thorne",
+    "code": "P84001"
+  },
+  "metadata": {
+    "sourceVendor": "emar.link",
+    "externalId": "RES-10238-E",
+    "receivedAt": "2026-02-10T19:20:00Z"
+  }
 }

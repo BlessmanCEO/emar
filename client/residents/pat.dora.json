@@ -1,13 +1,36 @@
 {
   "nhsNumber": "6655441122",
-  "name": { "prefix": "Mrs.", "given": ["Pat", "Dora"], "family": "Phoenix" },
+  "resident_id": "PDP-19431126",
+  "name": {
+    "prefix": "Mrs.",
+    "given": [
+      "Pat",
+      "Dora"
+    ],
+    "family": "Phoenix"
+  },
   "dateOfBirth": "1943-11-26",
   "gender": "female",
   "careSetting": "Nursing Home",
-  "address": { "line1": "15 Chorlton Street", "line2": "Apt 201", "city": "Manchester", "postcode": "M1 3HY" },
+  "address": {
+    "line1": "15 Chorlton Street",
+    "line2": "Apt 201",
+    "city": "Manchester",
+    "postcode": "M1 3HY"
+  },
   "weight": 60.5,
   "allergies": "No known allergies",
-  "rawPreferences": ["Hand cup to patient (tremors)", "Use straw for liquids"],
-  "gpDetails": { "name": "Dr. Elizabeth Thorne", "code": "P84001" },
-  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-20010-Q", "receivedAt": "2026-02-11T10:15:00Z" }
+  "rawPreferences": [
+    "Hand cup to patient (tremors)",
+    "Use straw for liquids"
+  ],
+  "gpDetails": {
+    "name": "Dr. Elizabeth Thorne",
+    "code": "P84001"
+  },
+  "metadata": {
+    "sourceVendor": "emar.link",
+    "externalId": "RES-20010-Q",
+    "receivedAt": "2026-02-11T10:15:00Z"
+  }
 }

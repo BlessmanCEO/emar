@@ -1,13 +1,35 @@
 {
   "nhsNumber": "4545676789",
-  "name": { "prefix": "Mr.", "given": ["Liam"], "family": "Cunningham" },
+  "resident_id": "LC-19580602",
+  "name": {
+    "prefix": "Mr.",
+    "given": [
+      "Liam"
+    ],
+    "family": "Cunningham"
+  },
   "dateOfBirth": "1958-06-02",
   "gender": "male",
   "careSetting": "Nursing Home",
-  "address": { "line1": "21 Cheetham Hill", "line2": "Room 44", "city": "Manchester", "postcode": "M8 8EP" },
+  "address": {
+    "line1": "21 Cheetham Hill",
+    "line2": "Room 44",
+    "city": "Manchester",
+    "postcode": "M8 8EP"
+  },
   "weight": 88.3,
   "allergies": "Shellfish",
-  "rawPreferences": ["Take on an empty stomach where possible", "Large glass of water required"],
-  "gpDetails": { "name": "Dr. Marcus Welby", "code": "P84022" },
-  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-20007-T", "receivedAt": "2026-02-11T09:30:00Z" }
+  "rawPreferences": [
+    "Take on an empty stomach where possible",
+    "Large glass of water required"
+  ],
+  "gpDetails": {
+    "name": "Dr. Marcus Welby",
+    "code": "P84022"
+  },
+  "metadata": {
+    "sourceVendor": "emar.link",
+    "externalId": "RES-20007-T",
+    "receivedAt": "2026-02-11T09:30:00Z"
+  }
 }

@@ -1,13 +1,35 @@
 {
   "nhsNumber": "9090818172",
-  "name": { "prefix": "Ms.", "given": ["Sylvia"], "family": "Pankhurst" },
+  "resident_id": "SP-19411010",
+  "name": {
+    "prefix": "Ms.",
+    "given": [
+      "Sylvia"
+    ],
+    "family": "Pankhurst"
+  },
   "dateOfBirth": "1941-10-10",
   "gender": "female",
   "careSetting": "Nursing Home",
-  "address": { "line1": "33 Ancoats Way", "line2": "Flat 12", "city": "Manchester", "postcode": "M4 6AJ" },
+  "address": {
+    "line1": "33 Ancoats Way",
+    "line2": "Flat 12",
+    "city": "Manchester",
+    "postcode": "M4 6AJ"
+  },
   "weight": 54.9,
   "allergies": "No known allergies",
-  "rawPreferences": ["Crush and mix with applesauce", "Observe for 15 mins after admin"],
-  "gpDetails": { "name": "Dr. Sarah Jenkins", "code": "P84055" },
-  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-20008-S", "receivedAt": "2026-02-11T09:45:00Z" }
+  "rawPreferences": [
+    "Crush and mix with applesauce",
+    "Observe for 15 mins after admin"
+  ],
+  "gpDetails": {
+    "name": "Dr. Sarah Jenkins",
+    "code": "P84055"
+  },
+  "metadata": {
+    "sourceVendor": "emar.link",
+    "externalId": "RES-20008-S",
+    "receivedAt": "2026-02-11T09:45:00Z"
+  }
 }

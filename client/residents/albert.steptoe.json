@@ -1,13 +1,35 @@
 {
   "nhsNumber": "4455667788",
-  "name": { "prefix": "Mr.", "given": ["Albert"], "family": "Steptoe" },
+  "resident_id": "AS-19400618",
+  "name": {
+    "prefix": "Mr.",
+    "given": [
+      "Albert"
+    ],
+    "family": "Steptoe"
+  },
   "dateOfBirth": "1940-06-18",
   "gender": "male",
   "careSetting": "Nursing Home",
-  "address": { "line1": "123 Willow Lane", "line2": "Room 8", "city": "Manchester", "postcode": "M14 7AL" },
+  "address": {
+    "line1": "123 Willow Lane",
+    "line2": "Room 8",
+    "city": "Manchester",
+    "postcode": "M14 7AL"
+  },
   "weight": 70.0,
   "allergies": "No known allergies",
-  "rawPreferences": ["Explain what each pill is before giving", "Take with milk"],
-  "gpDetails": { "name": "Dr. Elizabeth Thorne", "code": "P84001" },
-  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-10239-F", "receivedAt": "2026-02-10T19:25:00Z" }
+  "rawPreferences": [
+    "Explain what each pill is before giving",
+    "Take with milk"
+  ],
+  "gpDetails": {
+    "name": "Dr. Elizabeth Thorne",
+    "code": "P84001"
+  },
+  "metadata": {
+    "sourceVendor": "emar.link",
+    "externalId": "RES-10239-F",
+    "receivedAt": "2026-02-10T19:25:00Z"
+  }
 }

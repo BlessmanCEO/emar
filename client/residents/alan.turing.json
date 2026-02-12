@@ -1,13 +1,35 @@
 {
   "nhsNumber": "1928374650",
-  "name": { "prefix": "Mr.", "given": ["Alan"], "family": "Turing" },
+  "resident_id": "AT-19320623",
+  "name": {
+    "prefix": "Mr.",
+    "given": [
+      "Alan"
+    ],
+    "family": "Turing"
+  },
   "dateOfBirth": "1932-06-23",
   "gender": "male",
   "careSetting": "Nursing Home",
-  "address": { "line1": "12 Piccadilly Gardens", "line2": "Suite 9", "city": "Manchester", "postcode": "M1 1AF" },
+  "address": {
+    "line1": "12 Piccadilly Gardens",
+    "line2": "Suite 9",
+    "city": "Manchester",
+    "postcode": "M1 1AF"
+  },
   "weight": 75.5,
   "allergies": "Bee stings",
-  "rawPreferences": ["Strict adherence to timing schedule", "Log administration immediately"],
-  "gpDetails": { "name": "Dr. Marcus Welby", "code": "P84022" },
-  "metadata": { "sourceVendor": "emar.link", "externalId": "RES-20003-X", "receivedAt": "2026-02-11T08:30:00Z" }
+  "rawPreferences": [
+    "Strict adherence to timing schedule",
+    "Log administration immediately"
+  ],
+  "gpDetails": {
+    "name": "Dr. Marcus Welby",
+    "code": "P84022"
+  },
+  "metadata": {
+    "sourceVendor": "emar.link",
+    "externalId": "RES-20003-X",
+    "receivedAt": "2026-02-11T08:30:00Z"
+  }
 }
