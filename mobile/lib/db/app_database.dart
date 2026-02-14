@@ -115,6 +115,18 @@ class Administrations extends Table {
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
+  static const String dummyOrgId = '550e8400-e29b-41d4-a716-446655440000';
+
+  static const Set<String> _mobayResidentIds = {
+    'b1f7ac2d-3f2e-4b3b-b2ec-5f33135ec001',
+    'b1f7ac2d-3f2e-4b3b-b2ec-5f33135ec002',
+    'b1f7ac2d-3f2e-4b3b-b2ec-5f33135ec003',
+  };
+
+  static String siteNameForResidentId(String residentId) {
+    return _mobayResidentIds.contains(residentId) ? 'Mobay' : 'Goldthorn Home';
+  }
+
   @override
   int get schemaVersion => 1;
 
@@ -124,10 +136,11 @@ class AppDatabase extends _$AppDatabase {
     required int cursor,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    final existing = await (select(syncState)
-          ..where((row) => row.orgId.equals(orgId))
-          ..where((row) => row.siteId.equalsNullable(siteId)))
-        .getSingleOrNull();
+    final existing =
+        await (select(syncState)
+              ..where((row) => row.orgId.equals(orgId))
+              ..where((row) => row.siteId.equalsNullable(siteId)))
+            .getSingleOrNull();
 
     if (existing == null) {
       await into(syncState).insert(
@@ -148,10 +161,11 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> getCursor(String orgId, String? siteId) async {
-    final row = await (select(syncState)
-          ..where((row) => row.orgId.equals(orgId))
-          ..where((row) => row.siteId.equalsNullable(siteId)))
-        .getSingleOrNull();
+    final row =
+        await (select(syncState)
+              ..where((row) => row.orgId.equals(orgId))
+              ..where((row) => row.siteId.equalsNullable(siteId)))
+            .getSingleOrNull();
     return row?.cursor ?? 0;
   }
 
@@ -219,6 +233,158 @@ class AppDatabase extends _$AppDatabase {
         createdAt: Value(now),
       ),
     );
+  }
+
+  Future<List<Resident>> getActiveResidents() {
+    return (select(residents)
+          ..where((row) => row.status.equals('active'))
+          ..orderBy([
+            (row) => OrderingTerm(expression: row.lastName),
+            (row) => OrderingTerm(expression: row.firstName),
+          ]))
+        .get();
+  }
+
+  Future<List<MedicationOrder>> getActiveMedicationOrdersForResident(
+    String residentId,
+  ) {
+    return (select(medicationOrders)
+          ..where((row) => row.residentId.equals(residentId))
+          ..where((row) => row.status.equals('active'))
+          ..orderBy([(row) => OrderingTerm(expression: row.medicationName)]))
+        .get();
+  }
+
+  Future<void> seedDummyClinicalDataIfEmpty() async {
+    final countExp = residents.residentId.count();
+    final countRow = await (selectOnly(
+      residents,
+    )..addColumns([countExp])).getSingle();
+    final residentCount = countRow.read(countExp) ?? 0;
+    if (residentCount > 0) {
+      return;
+    }
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    final residentRows = [
+      ResidentsCompanion.insert(
+        residentId: 'b1f7ac2d-3f2e-4b3b-b2ec-5f33135ec001',
+        orgId: dummyOrgId,
+        firstName: 'Gary',
+        lastName: 'Reid',
+        updatedAt: now,
+      ),
+      ResidentsCompanion.insert(
+        residentId: 'b1f7ac2d-3f2e-4b3b-b2ec-5f33135ec002',
+        orgId: dummyOrgId,
+        firstName: 'Samuel',
+        lastName: 'Oke',
+        updatedAt: now,
+      ),
+      ResidentsCompanion.insert(
+        residentId: 'b1f7ac2d-3f2e-4b3b-b2ec-5f33135ec003',
+        orgId: dummyOrgId,
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        updatedAt: now,
+      ),
+      ResidentsCompanion.insert(
+        residentId: 'c8d84cc0-9ff6-4a4f-bc95-20f98b2cf101',
+        orgId: dummyOrgId,
+        firstName: 'Alan',
+        lastName: 'Turing',
+        updatedAt: now,
+      ),
+      ResidentsCompanion.insert(
+        residentId: 'c8d84cc0-9ff6-4a4f-bc95-20f98b2cf102',
+        orgId: dummyOrgId,
+        firstName: 'Toni',
+        lastName: 'Morrison',
+        updatedAt: now,
+      ),
+      ResidentsCompanion.insert(
+        residentId: 'c8d84cc0-9ff6-4a4f-bc95-20f98b2cf103',
+        orgId: dummyOrgId,
+        firstName: 'James',
+        lastName: 'Baldwin',
+        updatedAt: now,
+      ),
+    ];
+
+    final orderRows = [
+      MedicationOrdersCompanion.insert(
+        orderId: '97f80d2f-6dd7-4be4-8ca2-e188af390001',
+        orgId: dummyOrgId,
+        residentId: 'b1f7ac2d-3f2e-4b3b-b2ec-5f33135ec001',
+        medicationName: 'Epilim Chrono 200 tablets',
+        doseValue: Value(1.0),
+        doseUnit: Value('tablet'),
+        route: Value('Oral'),
+        frequency: Value('Morning'),
+        updatedAt: now,
+      ),
+      MedicationOrdersCompanion.insert(
+        orderId: '97f80d2f-6dd7-4be4-8ca2-e188af390002',
+        orgId: dummyOrgId,
+        residentId: 'b1f7ac2d-3f2e-4b3b-b2ec-5f33135ec001',
+        medicationName: 'Epilim Chrono 500 tablets',
+        doseValue: Value(2.0),
+        doseUnit: Value('tablets'),
+        route: Value('Oral'),
+        frequency: Value('Morning'),
+        updatedAt: now,
+      ),
+      MedicationOrdersCompanion.insert(
+        orderId: '97f80d2f-6dd7-4be4-8ca2-e188af390003',
+        orgId: dummyOrgId,
+        residentId: 'b1f7ac2d-3f2e-4b3b-b2ec-5f33135ec002',
+        medicationName: 'Metformin 500 mg',
+        doseValue: Value(1.0),
+        doseUnit: Value('tablet'),
+        route: Value('Oral'),
+        frequency: Value('Morning, Evening'),
+        updatedAt: now,
+      ),
+      MedicationOrdersCompanion.insert(
+        orderId: '97f80d2f-6dd7-4be4-8ca2-e188af390004',
+        orgId: dummyOrgId,
+        residentId: 'c8d84cc0-9ff6-4a4f-bc95-20f98b2cf101',
+        medicationName: 'Lisinopril 10 mg',
+        doseValue: Value(1.0),
+        doseUnit: Value('tablet'),
+        route: Value('Oral'),
+        frequency: Value('Morning'),
+        updatedAt: now,
+      ),
+      MedicationOrdersCompanion.insert(
+        orderId: '97f80d2f-6dd7-4be4-8ca2-e188af390005',
+        orgId: dummyOrgId,
+        residentId: 'c8d84cc0-9ff6-4a4f-bc95-20f98b2cf102',
+        medicationName: 'Atorvastatin 20 mg',
+        doseValue: Value(1.0),
+        doseUnit: Value('tablet'),
+        route: Value('Oral'),
+        frequency: Value('Night'),
+        updatedAt: now,
+      ),
+      MedicationOrdersCompanion.insert(
+        orderId: '97f80d2f-6dd7-4be4-8ca2-e188af390006',
+        orgId: dummyOrgId,
+        residentId: 'c8d84cc0-9ff6-4a4f-bc95-20f98b2cf103',
+        medicationName: 'Sertraline 50 mg',
+        doseValue: Value(1.0),
+        doseUnit: Value('tablet'),
+        route: Value('Oral'),
+        frequency: Value('Morning'),
+        updatedAt: now,
+      ),
+    ];
+
+    await batch((b) {
+      b.insertAllOnConflictUpdate(residents, residentRows);
+      b.insertAllOnConflictUpdate(medicationOrders, orderRows);
+    });
   }
 }
 

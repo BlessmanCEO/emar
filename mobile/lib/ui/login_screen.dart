@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../db/app_database.dart';
 import '../models/login_request.dart';
 import '../sync/api_client.dart';
 import '../services/auth_service.dart';
-import '../ui/emar_screen.dart';
+import 'site_selection_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,7 +17,9 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _pinController = TextEditingController();
-  final _baseUrlController = TextEditingController(text: 'http://10.0.2.2:8080');
+  final _baseUrlController = TextEditingController(
+    text: 'http://10.0.2.2:8080',
+  );
   bool _loading = false;
   String _error = '';
 
@@ -46,7 +47,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    if (_usernameController.text.trim().isEmpty || _pinController.text.trim().isEmpty) {
+    if (_usernameController.text.trim().isEmpty ||
+        _pinController.text.trim().isEmpty) {
       setState(() => _error = 'Please enter username and PIN');
       return;
     }
@@ -73,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _navigateToHome() {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const EmarScreen()),
+      MaterialPageRoute(builder: (_) => const SiteSelectionScreen()),
     );
   }
 
@@ -143,7 +145,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(14),
                         borderSide: BorderSide.none,
                       ),
-                      prefixIcon: const Icon(Icons.person, color: Color(0xFF185C6B)),
+                      prefixIcon: const Icon(
+                        Icons.person,
+                        color: Color(0xFF185C6B),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -158,7 +163,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(14),
                         borderSide: BorderSide.none,
                       ),
-                      prefixIcon: const Icon(Icons.lock, color: Color(0xFF185C6B)),
+                      prefixIcon: const Icon(
+                        Icons.lock,
+                        color: Color(0xFF185C6B),
+                      ),
                     ),
                   ),
                   if (_error.isNotEmpty) ...[

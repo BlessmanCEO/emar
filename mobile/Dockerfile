@@ -20,8 +20,8 @@ RUN flutter_rust_bridge_codegen generate \
   -d lib \
   -c ios/Runner/bridge_generated.h || true
 
-# Build the web app (HTML renderer is now default in Flutter 3.x)
-RUN flutter build web
+# Build the web app (disable PWA caching for faster UI iteration)
+RUN flutter build web --pwa-strategy=none
 
 # Final stage - serve with nginx
 FROM nginx:alpine

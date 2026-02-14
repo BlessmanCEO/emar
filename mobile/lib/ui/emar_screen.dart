@@ -1,5 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import '../sync/api_client.dart';
+import 'medication_round_screen.dart';
 
 class EmarScreen extends StatefulWidget {
   const EmarScreen({super.key});
@@ -9,269 +13,253 @@ class EmarScreen extends StatefulWidget {
 }
 
 class _EmarScreenState extends State<EmarScreen> {
-  final _residents = const [
-    ResidentSummary('Ada Lovelace', 'A-102', 'Stable', true),
-    ResidentSummary('James Baldwin', 'B-214', 'Needs review', false),
-    ResidentSummary('Toni Morrison', 'C-110', 'Stable', false),
-    ResidentSummary('Alan Turing', 'A-119', 'Late dose', false),
-  ];
-
+  final _searchController = TextEditingController();
+  late final ApiClient _apiClient;
+  late Future<List<DemoResident>> _residentsFuture;
   int _selectedIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    _apiClient = ApiClient(baseUrl: _resolveApiBaseUrl());
+    _residentsFuture = _fetchResidents();
+  }
+
+  String _resolveApiBaseUrl() {
+    if (kIsWeb) {
+      final pageUri = Uri.base;
+      final scheme = pageUri.scheme.isEmpty ? 'http' : pageUri.scheme;
+      final host = pageUri.host.isEmpty ? 'localhost' : pageUri.host;
+      return '$scheme://$host:8080';
+    }
+    return 'http://10.0.2.2:8080';
+  }
+
+  Future<List<DemoResident>> _fetchResidents() {
+    return _apiClient.fetchDemoResidents();
+  }
+
+  String _connectionHint() {
+    if (kIsWeb) {
+      return 'Check backend is reachable on port 8080 from this browser host.';
+    }
+    return 'If using Android emulator, use 10.0.2.2:8080. On a physical phone, use your computer LAN IP or adb reverse.';
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFF7F2EA), Color(0xFFE6F0F3)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
+            colors: [Color(0xFFF4F7F9), Color(0xFFEAF2F6)],
           ),
         ),
         child: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 860;
-              return Stack(
-                children: [
-                  _DecorLayer(isWide: isWide),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: isWide
-                        ? _buildWideLayout(theme)
-                        : _buildNarrowLayout(theme),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWideLayout(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 320,
-            child: _ResidentPanel(
-              residents: _residents,
-              selectedIndex: _selectedIndex,
-              onSelect: (index) => setState(() => _selectedIndex = index),
-            ),
-          ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: _MarPanel(
-              resident: _residents[_selectedIndex],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNarrowLayout(ThemeData theme) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _HeaderBar(
-          resident: _residents[_selectedIndex],
-        ),
-        const SizedBox(height: 16),
-        _ResidentPanel(
-          residents: _residents,
-          selectedIndex: _selectedIndex,
-          onSelect: (index) => setState(() => _selectedIndex = index),
-          dense: true,
-        ),
-        const SizedBox(height: 16),
-        _MarPanel(resident: _residents[_selectedIndex]),
-      ],
-    );
-  }
-}
-
-class _DecorLayer extends StatelessWidget {
-  const _DecorLayer({required this.isWide});
-
-  final bool isWide;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Stack(
-        children: [
-          Positioned(
-            right: isWide ? 60 : -40,
-            top: -60,
-            child: Container(
-              width: isWide ? 220 : 160,
-              height: isWide ? 220 : 160,
-              decoration: BoxDecoration(
-                color: const Color(0xFFB7D7D9).withOpacity(0.4),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          Positioned(
-            left: -40,
-            bottom: -30,
-            child: Container(
-              width: 160,
-              height: 160,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1C9A9).withOpacity(0.4),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HeaderBar extends StatelessWidget {
-  const _HeaderBar({required this.resident});
-
-  final ResidentSummary resident;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.85),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          )
-        ],
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: const Color(0xFF1F6B75),
-            child: Text(
-              resident.name.substring(0, 1),
-              style: GoogleFonts.dmSans(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Stack(
             children: [
-              Text(
-                resident.name,
-                style: GoogleFonts.dmSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Text(
-                'Room ${resident.room}',
-                style: GoogleFonts.dmSans(
-                  fontSize: 12,
-                  color: const Color(0xFF5F6B6D),
+              const _ScreenDecor(),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () {
+                            if (Navigator.of(context).canPop()) {
+                              Navigator.of(context).pop();
+                            } else {
+                              Navigator.of(
+                                context,
+                              ).pushReplacementNamed('/site-select');
+                            }
+                          },
+                          icon: const Icon(Icons.arrow_back_rounded),
+                        ),
+                        Text(
+                          'Residents',
+                          style: GoogleFonts.nunitoSans(
+                            fontSize: 30,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF163447),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _searchController,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'Search by name',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Expanded(
+                      child: FutureBuilder<List<DemoResident>>(
+                        future: _residentsFuture,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+                          if (snapshot.hasError) {
+                            return _ErrorCard(
+                              message:
+                                  'Failed to load residents: ${snapshot.error}\n${_connectionHint()}',
+                              onRetry: () {
+                                setState(() {
+                                  _residentsFuture = _fetchResidents();
+                                });
+                              },
+                            );
+                          }
+
+                          final allResidents = snapshot.data ?? const [];
+                          final q = _searchController.text.trim().toLowerCase();
+                          final filtered = allResidents.where((resident) {
+                            if (q.isEmpty) return true;
+                            return resident.fullName.toLowerCase().contains(
+                                  q,
+                                ) ||
+                                resident.siteName.toLowerCase().contains(q) ||
+                                (resident.addressLine1 ?? '')
+                                    .toLowerCase()
+                                    .contains(q);
+                          }).toList();
+
+                          if (filtered.isEmpty) {
+                            return _EmptyCard(
+                              message: q.isEmpty
+                                  ? 'No active residents in database.'
+                                  : 'No residents match "$q".',
+                            );
+                          }
+
+                          if (_selectedIndex >= filtered.length) {
+                            _selectedIndex = 0;
+                          }
+
+                          final selected = filtered[_selectedIndex];
+
+                          return Column(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xF7FFFFFF),
+                                    borderRadius: BorderRadius.circular(22),
+                                    border: Border.all(
+                                      color: const Color(0xFFD4E1E8),
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x12263A47),
+                                        blurRadius: 24,
+                                        offset: Offset(0, 10),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ListView.builder(
+                                    itemCount: filtered.length,
+                                    itemBuilder: (context, index) {
+                                      final resident = filtered[index];
+                                      return _ResidentTile(
+                                        resident: resident,
+                                        selected: index == _selectedIndex,
+                                        onTap: () => setState(
+                                          () => _selectedIndex = index,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.icon(
+                                  onPressed: () async {
+                                    try {
+                                      final medications = await _apiClient
+                                          .fetchDemoMedications(
+                                            selected.residentId,
+                                          );
+                                      if (!context.mounted) return;
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => MedicationRoundScreen(
+                                            residentName: selected.fullName,
+                                            roomLabel: selected.siteName,
+                                            medications: medications,
+                                          ),
+                                        ),
+                                      );
+                                    } catch (err) {
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Unable to load medications: $err. ${_connectionHint()}',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(Icons.play_arrow_rounded),
+                                  label: Text(
+                                    'Start Round',
+                                    style: GoogleFonts.nunitoSans(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: const Color(0xFF1C6CA1),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const Spacer(),
-          _StatusPill(text: resident.status, alert: resident.alert),
-        ],
-      ),
-    );
-  }
-}
-
-class _ResidentPanel extends StatelessWidget {
-  const _ResidentPanel({
-    required this.residents,
-    required this.selectedIndex,
-    required this.onSelect,
-    this.dense = false,
-  });
-
-  final List<ResidentSummary> residents;
-  final int selectedIndex;
-  final ValueChanged<int> onSelect;
-  final bool dense;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE2E8EA)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 8),
-          )
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Residents',
-            style: GoogleFonts.dmSans(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            decoration: InputDecoration(
-              hintText: 'Search by name or room',
-              filled: true,
-              fillColor: const Color(0xFFF4F6F7),
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: const [
-              _FilterChip('All'),
-              _FilterChip('Due now'),
-              _FilterChip('Late'),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ...List.generate(
-            residents.length,
-            (index) => _ResidentTile(
-              resident: residents[index],
-              selected: index == selectedIndex,
-              onTap: () => onSelect(index),
-              dense: dense,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -282,40 +270,40 @@ class _ResidentTile extends StatelessWidget {
     required this.resident,
     required this.selected,
     required this.onTap,
-    required this.dense,
   });
 
-  final ResidentSummary resident;
+  final DemoResident resident;
   final bool selected;
   final VoidCallback onTap;
-  final bool dense;
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? const Color(0xFF1F6B75) : const Color(0xFFEDF4F5);
-    final textColor = selected ? Colors.white : const Color(0xFF2A3D40);
+    final bg = selected ? const Color(0xFF1C6CA1) : const Color(0xFFF3F7FA);
+    final fg = selected ? Colors.white : const Color(0xFF213948);
+    final sub = selected ? Colors.white70 : const Color(0xFF5E7582);
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         margin: const EdgeInsets.only(bottom: 10),
-        padding: EdgeInsets.all(dense ? 10 : 14),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: color,
+          color: bg,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           children: [
             CircleAvatar(
-              radius: dense ? 16 : 18,
+              radius: 18,
               backgroundColor: selected
-                  ? Colors.white.withOpacity(0.2)
-                  : const Color(0xFF1F6B75),
+                  ? const Color(0x40FFFFFF)
+                  : const Color(0xFF2A7EB6),
               child: Text(
-                resident.name.substring(0, 1),
-                style: GoogleFonts.dmSans(
-                  color: selected ? Colors.white : Colors.white,
-                  fontWeight: FontWeight.w700,
+                resident.firstName.substring(0, 1),
+                style: GoogleFonts.nunitoSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
@@ -325,23 +313,31 @@ class _ResidentTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    resident.name,
-                    style: GoogleFonts.dmSans(
-                      color: textColor,
-                      fontWeight: FontWeight.w700,
+                    resident.fullName,
+                    style: GoogleFonts.nunitoSans(
+                      color: fg,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                   Text(
-                    'Room ${resident.room}',
-                    style: GoogleFonts.dmSans(
-                      color: textColor.withOpacity(0.8),
-                      fontSize: 12,
+                    '${resident.siteName} • ${resident.addressLine1 ?? 'No address'}',
+                    style: GoogleFonts.nunitoSans(
+                      color: sub,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
               ),
             ),
-            _StatusDot(alert: resident.alert),
+            Container(
+              width: 10,
+              height: 10,
+              decoration: const BoxDecoration(
+                color: Color(0xFF2E8F75),
+                shape: BoxShape.circle,
+              ),
+            ),
           ],
         ),
       ),
@@ -349,257 +345,88 @@ class _ResidentTile extends StatelessWidget {
   }
 }
 
-class _MarPanel extends StatelessWidget {
-  const _MarPanel({required this.resident});
-
-  final ResidentSummary resident;
+class _ScreenDecor extends StatelessWidget {
+  const _ScreenDecor();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.92),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE2E8EA)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return IgnorePointer(
+      child: Stack(
         children: [
-          Row(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'MAR Today',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    '${resident.name} • Room ${resident.room}',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 13,
-                      color: const Color(0xFF5F6B6D),
-                    ),
-                  ),
-                ],
+          Positioned(
+            top: -70,
+            right: -60,
+            child: Container(
+              width: 220,
+              height: 220,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0x1F1C6CA1),
               ),
-              const Spacer(),
-              FilledButton(
-                onPressed: () {},
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF1F6B75),
-                ),
-                child: const Text('Start Round'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          _MedicationCard(
-            medication: 'Metformin 500 mg',
-            schedule: '08:00, 20:00',
-            status: 'Due now',
-            statusColor: const Color(0xFFE76F51),
-            details: const ['With food', 'Oral'],
-          ),
-          const SizedBox(height: 14),
-          _MedicationCard(
-            medication: 'Atorvastatin 20 mg',
-            schedule: '21:00',
-            status: 'Upcoming',
-            statusColor: const Color(0xFF2A9D8F),
-            details: const ['Bedtime', 'Oral'],
-          ),
-          const SizedBox(height: 14),
-          _MedicationCard(
-            medication: 'Lisinopril 10 mg',
-            schedule: '07:30',
-            status: 'Given',
-            statusColor: const Color(0xFF457B9D),
-            details: const ['BP check', 'Oral'],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MedicationCard extends StatelessWidget {
-  const _MedicationCard({
-    required this.medication,
-    required this.schedule,
-    required this.status,
-    required this.statusColor,
-    required this.details,
-  });
-
-  final String medication;
-  final String schedule;
-  final String status;
-  final Color statusColor;
-  final List<String> details;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFB),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE4EBEE)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  medication,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  status,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    color: statusColor,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            schedule,
-            style: GoogleFonts.dmSans(
-              color: const Color(0xFF5F6B6D),
             ),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            children: details
-                .map(
-                  (detail) => Chip(
-                    label: Text(detail),
-                    backgroundColor: Colors.white,
-                    shape: StadiumBorder(
-                      side: BorderSide(color: Colors.grey.shade200),
-                    ),
-                  ),
-                )
-                .toList(),
+          Positioned(
+            left: -30,
+            bottom: -50,
+            child: Container(
+              width: 170,
+              height: 170,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0x1A2E8F75),
+              ),
+            ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              OutlinedButton(
-                onPressed: () {},
-                child: const Text('Refused'),
-              ),
-              const SizedBox(width: 10),
-              FilledButton(
-                onPressed: () {},
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF1F6B75),
-                ),
-                child: const Text('Record Dose'),
-              ),
-            ],
-          )
         ],
       ),
     );
   }
 }
 
-class _FilterChip extends StatelessWidget {
-  const _FilterChip(this.label);
+class _ErrorCard extends StatelessWidget {
+  const _ErrorCard({required this.message, required this.onRetry});
 
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Chip(
-      label: Text(label),
-      labelStyle: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
-      backgroundColor: const Color(0xFFF3F6F7),
-      side: const BorderSide(color: Color(0xFFE1E6E8)),
-    );
-  }
-}
-
-class _StatusDot extends StatelessWidget {
-  const _StatusDot({required this.alert});
-
-  final bool alert;
+  final String message;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 10,
-      height: 10,
-      decoration: BoxDecoration(
-        color: alert ? const Color(0xFFE76F51) : const Color(0xFF2A9D8F),
-        shape: BoxShape.circle,
-      ),
-    );
-  }
-}
-
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.text, required this.alert});
-
-  final String text;
-  final bool alert;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = alert ? const Color(0xFFE76F51) : const Color(0xFF2A9D8F);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        text,
-        style: GoogleFonts.dmSans(
-          color: color,
-          fontWeight: FontWeight.w600,
-          fontSize: 12,
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            FilledButton(onPressed: onRetry, child: const Text('Retry')),
+          ],
         ),
       ),
     );
   }
 }
 
-class ResidentSummary {
-  const ResidentSummary(this.name, this.room, this.status, this.alert);
+class _EmptyCard extends StatelessWidget {
+  const _EmptyCard({required this.message});
 
-  final String name;
-  final String room;
-  final String status;
-  final bool alert;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(message),
+      ),
+    );
+  }
 }

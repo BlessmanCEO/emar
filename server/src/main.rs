@@ -35,6 +35,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/sync/push", post(handlers::sync::push))
         .route("/sync/pull", get(handlers::sync::pull))
         .route("/bootstrap", get(handlers::bootstrap::bootstrap))
+        .route("/demo/residents", get(handlers::demo::residents))
+        .route(
+            "/demo/residents/:resident_id/medications",
+            get(handlers::demo::resident_medications),
+        )
         .with_state(state)
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any));

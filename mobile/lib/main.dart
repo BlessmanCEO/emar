@@ -6,7 +6,7 @@ import 'rust_core_bridge.dart';
 import 'sync/api_client.dart';
 import 'sync/sync_service.dart';
 import 'ui/emar_screen.dart';
-import 'ui/login_screen.dart';
+import 'ui/site_selection_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +32,8 @@ class EmarApp extends StatelessWidget {
         useMaterial3: true,
       ),
       routes: {
-        '/': (_) => const LoginScreen(),
+        '/': (_) => const SiteSelectionScreen(),
+        '/site-select': (_) => const SiteSelectionScreen(),
         '/emar': (_) => const EmarScreen(),
         '/sync': (_) => const SyncDemoScreen(),
       },
@@ -188,8 +189,9 @@ class _SyncDemoScreenState extends State<SyncDemoScreen> {
   }
 
   Future<void> _testRustCore() async {
-    final normalized = await RustCoreBridge.instance
-        .normalizeMedicationName('Acetaminophen 500 MG');
+    final normalized = await RustCoreBridge.instance.normalizeMedicationName(
+      'Acetaminophen 500 MG',
+    );
     setState(() {
       _status = 'Rust core: $normalized';
     });
