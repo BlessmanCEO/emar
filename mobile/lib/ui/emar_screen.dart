@@ -6,13 +6,16 @@ import '../sync/api_client.dart';
 import 'medication_round_screen.dart';
 
 class EmarScreen extends StatefulWidget {
-  const EmarScreen({super.key});
+  const EmarScreen({super.key, this.siteFilter});
+
+  final String? siteFilter;
 
   @override
   State<EmarScreen> createState() => _EmarScreenState();
 }
 
 class _EmarScreenState extends State<EmarScreen> {
+  static const _apiBaseUrlFromEnv = String.fromEnvironment('API_BASE_URL');
   final _searchController = TextEditingController();
   late final ApiClient _apiClient;
   late Future<List<DemoResident>> _residentsFuture;
@@ -26,6 +29,9 @@ class _EmarScreenState extends State<EmarScreen> {
   }
 
   String _resolveApiBaseUrl() {
+    if (_apiBaseUrlFromEnv.trim().isNotEmpty) {
+      return _apiBaseUrlFromEnv.trim();
+    }
     if (kIsWeb) {
       final pageUri = Uri.base;
       final scheme = pageUri.scheme.isEmpty ? 'http' : pageUri.scheme;
@@ -40,10 +46,13 @@ class _EmarScreenState extends State<EmarScreen> {
   }
 
   String _connectionHint() {
+    if (_apiBaseUrlFromEnv.trim().isNotEmpty) {
+      return 'Using API_BASE_URL=$_apiBaseUrlFromEnv. Verify backend is reachable from this device.';
+    }
     if (kIsWeb) {
       return 'Check backend is reachable on port 8080 from this browser host.';
     }
-    return 'If using Android emulator, use 10.0.2.2:8080. On a physical phone, use your computer LAN IP or adb reverse.';
+    return 'Set --dart-define=API_BASE_URL=http://<your-lan-ip>:8080 for physical phones, or use 10.0.2.2:8080 on Android emulator.';
   }
 
   @override
@@ -138,6 +147,13 @@ class _EmarScreenState extends State<EmarScreen> {
                           final allResidents = snapshot.data ?? const [];
                           final q = _searchController.text.trim().toLowerCase();
                           final filtered = allResidents.where((resident) {
+                            final siteFilter = widget.siteFilter?.trim();
+                            if (siteFilter != null &&
+                                siteFilter.isNotEmpty &&
+                                resident.siteName.toLowerCase() !=
+                                    siteFilter.toLowerCase()) {
+                              return false;
+                            }
                             if (q.isEmpty) return true;
                             return resident.fullName.toLowerCase().contains(
                                   q,
@@ -149,9 +165,12 @@ class _EmarScreenState extends State<EmarScreen> {
                           }).toList();
 
                           if (filtered.isEmpty) {
+                            final siteFilter = widget.siteFilter?.trim();
                             return _EmptyCard(
                               message: q.isEmpty
-                                  ? 'No active residents in database.'
+                                  ? (siteFilter == null || siteFilter.isEmpty
+                                        ? 'No active residents in database.'
+                                        : 'No active residents found for $siteFilter.')
                                   : 'No residents match "$q".',
                             );
                           }
@@ -212,6 +231,11 @@ class _EmarScreenState extends State<EmarScreen> {
                                           builder: (_) => MedicationRoundScreen(
                                             residentName: selected.fullName,
                                             roomLabel: selected.siteName,
+                                            dateOfBirth: selected.dateOfBirth,
+                                            addressLine1: selected.addressLine1,
+                                            allergies: selected.allergies,
+                                            specialPreferences:
+                                                selected.specialPreferences,
                                             medications: medications,
                                           ),
                                         ),

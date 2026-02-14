@@ -126,16 +126,22 @@ class DemoResident {
     required this.firstName,
     required this.lastName,
     required this.status,
+    required this.dateOfBirth,
     required this.siteName,
     required this.addressLine1,
+    required this.allergies,
+    required this.specialPreferences,
   });
 
   final String residentId;
   final String firstName;
   final String lastName;
   final String status;
+  final String? dateOfBirth;
   final String siteName;
   final String? addressLine1;
+  final String? allergies;
+  final List<String> specialPreferences;
 
   String get fullName => '$firstName $lastName';
 
@@ -145,8 +151,14 @@ class DemoResident {
       firstName: json['first_name'] as String,
       lastName: json['last_name'] as String,
       status: json['status'] as String,
+      dateOfBirth: json['date_of_birth'] as String?,
       siteName: json['site_name'] as String,
       addressLine1: json['address_line1'] as String?,
+      allergies: json['allergies'] as String?,
+      specialPreferences:
+          (json['raw_preferences'] as List<dynamic>? ?? const [])
+              .map((e) => e.toString())
+              .toList(),
     );
   }
 }
