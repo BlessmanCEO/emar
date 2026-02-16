@@ -128,9 +128,12 @@ class AppDatabase extends _$AppDatabase {
   }
 
   static String roundKeyFor(DateTime now, int roundIndex) {
-    final date =
-        '${now.year.toString().padLeft(4, '0')}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    final date = dateKeyFor(now);
     return '$date-r$roundIndex';
+  }
+
+  static String dateKeyFor(DateTime date) {
+    return '${date.year.toString().padLeft(4, '0')}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}';
   }
 
   static String administrationIdForRound({
@@ -281,6 +284,15 @@ class AppDatabase extends _$AppDatabase {
     String roundKey,
   ) async {
     final prefix = 'round:$roundKey:%';
+    return (select(
+      administrations,
+    )..where((row) => row.marEntryId.like(prefix))).get();
+  }
+
+  Future<List<Administration>> getAdministrationsForDateKey(
+    String dateKey,
+  ) async {
+    final prefix = 'round:$dateKey-%';
     return (select(
       administrations,
     )..where((row) => row.marEntryId.like(prefix))).get();

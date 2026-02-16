@@ -10,6 +10,8 @@ enum RoundActionStatus { taken, refused, withheld }
 
 enum ResidentMedicationTab { scheduled, prn }
 
+enum _PrnRequestStage { idle, prompt, ready }
+
 class RoundExecutionResult {
   const RoundExecutionResult({
     required this.totalDue,
@@ -56,12 +58,14 @@ class MedicationRoundInitialAction {
     required this.timestamp,
     this.reason,
     this.note,
+    this.staffName,
   });
 
   final RoundActionStatus status;
   final DateTime timestamp;
   final String? reason;
   final String? note;
+  final String? staffName;
 }
 
 class MedicationRoundScreen extends StatefulWidget {
@@ -72,6 +76,9 @@ class MedicationRoundScreen extends StatefulWidget {
     required this.siteName,
     required this.dateOfBirth,
     required this.allergies,
+    this.medicalConditions = const [],
+    this.preferences = const [],
+    this.additionalNotes,
     required this.medications,
     required this.roundLabel,
     required this.roundWindow,
@@ -90,6 +97,9 @@ class MedicationRoundScreen extends StatefulWidget {
   final String siteName;
   final String? dateOfBirth;
   final String? allergies;
+  final List<String> medicalConditions;
+  final List<String> preferences;
+  final String? additionalNotes;
   final List<DemoMedication> medications;
   final String roundLabel;
   final String roundWindow;
@@ -116,18 +126,27 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
   final Map<String, String> _noteInputByOrder = {};
   final Map<String, TimeOfDay> _timeInputByOrder = {};
   final Map<String, String> _stockCountByOrder = {};
+  final Map<String, _PrnRequestStage> _prnRequestByOrder = {};
   final ScrollController _listController = ScrollController();
   Timer? _nextFocusTimer;
   bool _bulkSelectionEnabled = false;
   bool _autoAdvanceTriggered = false;
+  bool _loadingDate = false;
   String? _nextBestOrderId;
   String? _expandedMedicationId;
   ResidentMedicationTab _residentTab = ResidentMedicationTab.scheduled;
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
     super.initState();
+    _selectedDate = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+    );
     _hydrateInitialActions();
+    unawaited(_loadResultsForSelectedDate());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _jumpToNextBestMedication();
@@ -151,6 +170,7 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
         timestamp: action.timestamp,
         note: action.note,
         reason: action.reason,
+        staffName: action.staffName,
       );
 
       DemoMedication? medication;
@@ -250,7 +270,7 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
       deviceId: widget.actorIdentity.deviceId,
       residentId: widget.residentId,
       orderId: medication.orderId,
-      roundKey: widget.roundKey,
+      roundKey: _roundKeyForMedication(medication),
       status: status,
       reasonCode: reasonCode,
       notes: result.note,
@@ -296,6 +316,200 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
     setState(() {
       _selectedMedicationIds.clear();
     });
+  }
+
+  _PrnRequestStage _prnRequestStageFor(String orderId) {
+    return _prnRequestByOrder[orderId] ?? _PrnRequestStage.idle;
+  }
+
+  void _setPrnRequestStage(String orderId, _PrnRequestStage stage) {
+    setState(() {
+      if (stage == _PrnRequestStage.idle) {
+        _prnRequestByOrder.remove(orderId);
+      } else {
+        _prnRequestByOrder[orderId] = stage;
+      }
+    });
+  }
+
+  Future<void> _submitPrnRequest(DemoMedication medication) async {
+    final note = (_noteInputByOrder[medication.orderId] ?? '').trim();
+    final now = DateTime.now();
+    final requestId =
+        'prnreq-${widget.residentId}-${medication.orderId}-${now.microsecondsSinceEpoch}';
+
+    try {
+      await widget.db.enqueueEvent(
+        eventId: requestId,
+        orgId: widget.actorIdentity.orgId,
+        siteId: widget.actorIdentity.siteId,
+        actorUserId: widget.actorIdentity.actorUserId,
+        deviceId: widget.actorIdentity.deviceId,
+        eventType: 'PrnRequested',
+        entityType: 'prn_request',
+        entityId: requestId,
+        occurredAt: now,
+        payload: {
+          'resident_id': widget.residentId,
+          'order_id': medication.orderId,
+          'medication_name': medication.medicationName,
+          'requested_at': now.millisecondsSinceEpoch,
+          'requested_by': _staffName,
+          'reason': note.isEmpty ? null : note,
+        },
+      );
+      _setPrnRequestStage(medication.orderId, _PrnRequestStage.idle);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('PRN request sent for ${medication.medicationName}.'),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Failed to queue PRN request.')),
+        );
+    }
+  }
+
+  String get _selectedDateLabel {
+    return _formatDateDdMmYyyy(_selectedDate);
+  }
+
+  String get _selectedDateKey => AppDatabase.dateKeyFor(_selectedDate);
+
+  int _roundIndexForPersistence(DemoMedication medication) {
+    if (medication.prn) return 4;
+    if (widget.showAllMedications) {
+      return _earliestRoundIndex(medication) ?? 0;
+    }
+    if (widget.prnOnlyMode) return 4;
+    return widget.roundIndex;
+  }
+
+  String _roundKeyForMedication(DemoMedication medication) {
+    return AppDatabase.roundKeyFor(
+      _selectedDate,
+      _roundIndexForPersistence(medication),
+    );
+  }
+
+  RoundActionStatus? _statusFromDb(String status) {
+    switch (status.toLowerCase()) {
+      case 'given':
+      case 'taken':
+      case 'administered':
+        return RoundActionStatus.taken;
+      case 'refused':
+        return RoundActionStatus.refused;
+      case 'withheld':
+      case 'omitted':
+      case 'missed':
+        return RoundActionStatus.withheld;
+      default:
+        return null;
+    }
+  }
+
+  Future<void> _loadResultsForSelectedDate() async {
+    if (!mounted) return;
+    setState(() {
+      _loadingDate = true;
+    });
+
+    final fromDb = <String, _MedicationResult>{};
+    if (widget.showAllMedications || widget.prnOnlyMode) {
+      final rows = await widget.db.getAdministrationsForDateKey(
+        _selectedDateKey,
+      );
+      for (final row in rows) {
+        if (row.residentId != widget.residentId) continue;
+        final status = _statusFromDb(row.status);
+        if (status == null) continue;
+        final existing = fromDb[row.orderId];
+        final candidateTime = row.administeredAt ?? row.updatedAt;
+        if (existing != null &&
+            existing.timestamp.millisecondsSinceEpoch > candidateTime) {
+          continue;
+        }
+        fromDb[row.orderId] = _MedicationResult(
+          status: status,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(candidateTime),
+          note: row.notes,
+          reason: row.reasonCode,
+          staffName: null,
+        );
+      }
+    } else {
+      final roundKey = AppDatabase.roundKeyFor(
+        _selectedDate,
+        widget.roundIndex,
+      );
+      final rows = await widget.db.getAdministrationsForRoundKey(roundKey);
+      for (final row in rows) {
+        if (row.residentId != widget.residentId) continue;
+        final status = _statusFromDb(row.status);
+        if (status == null) continue;
+        fromDb[row.orderId] = _MedicationResult(
+          status: status,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+            row.administeredAt ?? row.updatedAt,
+          ),
+          note: row.notes,
+          reason: row.reasonCode,
+          staffName: null,
+        );
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _results
+        ..clear()
+        ..addAll(fromDb);
+      _prnFollowUpDue.clear();
+      for (final med in widget.medications) {
+        final result = _results[med.orderId];
+        if (med.prn && result?.status == RoundActionStatus.taken) {
+          _prnFollowUpDue[med.orderId] = result!.timestamp.add(
+            const Duration(minutes: 45),
+          );
+        }
+      }
+      _expandedMedicationId = null;
+      _selectedMedicationIds.clear();
+      _bulkSelectionEnabled = false;
+      _prnRequestByOrder.clear();
+      _loadingDate = false;
+    });
+    _jumpToNextBestMedication();
+  }
+
+  Future<void> _selectDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020, 1, 1),
+      lastDate: DateTime(2100, 12, 31),
+      helpText: 'Select medication date',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _selectedDate = DateTime(picked.year, picked.month, picked.day);
+    });
+    await _loadResultsForSelectedDate();
+  }
+
+  Future<void> _moveDateByDays(int delta) async {
+    setState(() {
+      _selectedDate = _selectedDate.add(Duration(days: delta));
+    });
+    await _loadResultsForSelectedDate();
   }
 
   RoundExecutionResult _buildResult({required bool autoAdvance}) {
@@ -487,21 +701,20 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
       return;
     }
 
-    if (_results.containsKey(medication.orderId)) {
-      return;
-    }
-
     setState(() {
       if (_expandedMedicationId == medication.orderId) {
         _expandedMedicationId = null;
       } else {
+        final existing = _results[medication.orderId];
         _expandedMedicationId = medication.orderId;
         _doseInputByOrder.putIfAbsent(
           medication.orderId,
           () => _doseSummaryFor(medication),
         );
-        _noteInputByOrder.putIfAbsent(medication.orderId, () => '');
-        _timeInputByOrder.putIfAbsent(medication.orderId, TimeOfDay.now);
+        _noteInputByOrder[medication.orderId] = existing?.note ?? '';
+        _timeInputByOrder[medication.orderId] = existing == null
+            ? TimeOfDay.now()
+            : TimeOfDay.fromDateTime(existing.timestamp);
       }
     });
   }
@@ -510,10 +723,6 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
     DemoMedication medication,
     RoundActionStatus action,
   ) async {
-    if (_results.containsKey(medication.orderId)) {
-      return;
-    }
-
     final doseInput = (_doseInputByOrder[medication.orderId] ?? '').trim();
     final noteInput = (_noteInputByOrder[medication.orderId] ?? '').trim();
     final selectedTime =
@@ -606,8 +815,13 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
   }
 
   DateTime _dateTimeForTimeOfDay(TimeOfDay time) {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day, time.hour, time.minute);
+    return DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      time.hour,
+      time.minute,
+    );
   }
 
   Future<TimeOfDay?> _pickAdministrationTime({TimeOfDay? initialTime}) async {
@@ -623,6 +837,186 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
     final hh = value.hour.toString().padLeft(2, '0');
     final mm = value.minute.toString().padLeft(2, '0');
     return '$hh:$mm';
+  }
+
+  String _formatDateDdMmYyyy(DateTime value) {
+    final dd = value.day.toString().padLeft(2, '0');
+    final mm = value.month.toString().padLeft(2, '0');
+    final yyyy = value.year.toString().padLeft(4, '0');
+    return '$dd-$mm-$yyyy';
+  }
+
+  Future<void> _openResidentInfoSheet() async {
+    final conditions = widget.medicalConditions;
+    final preferences = widget.preferences;
+    final notes = widget.additionalNotes?.trim();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.residentName,
+                  style: GoogleFonts.nunitoSans(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF163447),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _infoRow(
+                  'Allergies',
+                  widget.allergies?.trim().isNotEmpty == true
+                      ? widget.allergies!.trim()
+                      : 'None known',
+                ),
+                _infoRow(
+                  'Medical conditions',
+                  conditions.isEmpty ? 'Not recorded' : conditions.join(', '),
+                ),
+                _infoRow(
+                  'Preferences',
+                  preferences.isEmpty ? 'Not recorded' : preferences.join(', '),
+                ),
+                _infoRow(
+                  'Additional notes',
+                  (notes != null && notes.isNotEmpty) ? notes : 'Not recorded',
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      Navigator.of(context).pop();
+                      await Future<void>.delayed(
+                        const Duration(milliseconds: 120),
+                      );
+                      if (!mounted) return;
+                      await _openMedicationProfileSheet();
+                    },
+                    icon: const Icon(Icons.medication_rounded, size: 16),
+                    label: const Text('Medication Profile'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openMedicationProfileSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Medication Profile',
+                  style: GoogleFonts.nunitoSans(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF163447),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: widget.medications.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final med = widget.medications[index];
+                      return Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFD7E3EB)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              med.medicationName,
+                              style: GoogleFonts.nunitoSans(
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF1D3D4F),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Common side effects: dizziness, nausea, fatigue.',
+                              style: GoogleFonts.nunitoSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF4E6978),
+                              ),
+                            ),
+                            Text(
+                              'If observed: monitor resident, record note, escalate to nurse in charge if persistent/severe.',
+                              style: GoogleFonts.nunitoSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF4E6978),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _handleQuickMenuAction(_QuickNavAction action) async {
+    switch (action) {
+      case _QuickNavAction.settings:
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Settings screen coming soon.')),
+        );
+        break;
+      case _QuickNavAction.about:
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('eMAR Mobile - build information.')),
+        );
+        break;
+      case _QuickNavAction.help:
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Help center coming soon.')),
+        );
+        break;
+      case _QuickNavAction.logout:
+        if (!mounted) return;
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/site-select', (_) => false);
+        break;
+    }
   }
 
   Future<void> _openStockCountSheet() async {
@@ -909,6 +1303,7 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
         timestamp: now,
         note: note,
         reason: reason,
+        staffName: _staffName,
       );
       if (status == RoundActionStatus.taken && medication.prn) {
         _prnFollowUpDue[medication.orderId] = now.add(
@@ -1095,6 +1490,14 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
                       ? medication.instructions!.trim()
                       : 'No additional instruction',
                 ),
+                if (_results[medication.orderId] != null)
+                  _infoRow(
+                    'Recorded by',
+                    _results[medication.orderId]!.staffName ?? 'Unknown',
+                  ),
+                if (_results[medication.orderId]?.note != null &&
+                    _results[medication.orderId]!.note!.trim().isNotEmpty)
+                  _infoRow('Note', _results[medication.orderId]!.note!.trim()),
                 const SizedBox(height: 10),
                 Text(
                   'MedAI signals',
@@ -1466,19 +1869,11 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
                   allergies: widget.allergies,
                   roundLabel: widget.roundLabel,
                   roundWindow: widget.roundWindow,
+                  showRoundBadge: !widget.showAllMedications,
                   progress: progress,
-                  bulkSelectionEnabled: _bulkSelectionEnabled,
-                  selectedCount: _selectedMedicationIds.length,
-                  totalSelectable: _pendingSelectableMedications().length,
-                  onToggleBulk: () {
-                    setState(() {
-                      _bulkSelectionEnabled = !_bulkSelectionEnabled;
-                      _selectedMedicationIds.clear();
-                    });
-                  },
                   onStockCount: _openStockCountSheet,
-                  onSelectAll: _selectAllPending,
-                  onClearSelection: _clearSelection,
+                  onResidentInfo: _openResidentInfoSheet,
+                  onMenuSelected: _handleQuickMenuAction,
                   onBack: () {
                     Navigator.of(context).pop(_buildResult(autoAdvance: false));
                   },
@@ -1508,12 +1903,79 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
                               _expandedMedicationId = null;
                               _selectedMedicationIds.clear();
                               _bulkSelectionEnabled = false;
+                              _prnRequestByOrder.clear();
                             });
                           },
                         ),
                       ),
                     ],
                   ),
+                ),
+              if (!widget.prnOnlyMode)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _bulkSelectionEnabled = !_bulkSelectionEnabled;
+                              _selectedMedicationIds.clear();
+                            });
+                          },
+                          icon: Icon(
+                            _bulkSelectionEnabled
+                                ? Icons.check_box_rounded
+                                : Icons.check_box_outline_blank_rounded,
+                          ),
+                          label: Text(
+                            _bulkSelectionEnabled ? 'Selecting' : 'Select',
+                          ),
+                        ),
+                        if (_bulkSelectionEnabled) const SizedBox(width: 8),
+                        if (_bulkSelectionEnabled)
+                          TextButton(
+                            onPressed: _pendingSelectableMedications().isEmpty
+                                ? null
+                                : _selectAllPending,
+                            child: Text(
+                              'Select all (${_pendingSelectableMedications().length})',
+                            ),
+                          ),
+                        if (_bulkSelectionEnabled)
+                          TextButton(
+                            onPressed: _clearSelection,
+                            child: const Text('Clear'),
+                          ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => _moveDateByDays(-1),
+                          icon: const Icon(Icons.chevron_left_rounded),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _selectDate,
+                          icon: const Icon(
+                            Icons.calendar_month_rounded,
+                            size: 16,
+                          ),
+                          label: Text(_selectedDateLabel),
+                        ),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => _moveDateByDays(1),
+                          icon: const Icon(Icons.chevron_right_rounded),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (_loadingDate)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(12, 0, 12, 6),
+                  child: LinearProgressIndicator(minHeight: 3),
                 ),
               Expanded(
                 child: _sortedMedications.isEmpty
@@ -1576,8 +2038,7 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
                               overdue: _isOverdue(medication),
                               highRisk: _isHighRisk(medication),
                               expanded:
-                                  _expandedMedicationId == medication.orderId &&
-                                  result == null,
+                                  _expandedMedicationId == medication.orderId,
                               doseInput:
                                   _doseInputByOrder[medication.orderId] ??
                                   _doseSummaryFor(medication),
@@ -1617,6 +2078,23 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
                                 medication,
                                 RoundActionStatus.withheld,
                               ),
+                              prnRequestStage: _prnRequestStageFor(
+                                medication.orderId,
+                              ),
+                              onStartPrnRequest: () => _setPrnRequestStage(
+                                medication.orderId,
+                                _PrnRequestStage.prompt,
+                              ),
+                              onPrnRequestYes: () => _setPrnRequestStage(
+                                medication.orderId,
+                                _PrnRequestStage.ready,
+                              ),
+                              onPrnRequestNo: () => _setPrnRequestStage(
+                                medication.orderId,
+                                _PrnRequestStage.idle,
+                              ),
+                              onSubmitPrnRequest: () =>
+                                  _submitPrnRequest(medication),
                               nextBest:
                                   _nextBestOrderId == medication.orderId &&
                                   result == null,
@@ -1654,14 +2132,11 @@ class _ResidentHeader extends StatelessWidget {
     required this.allergies,
     required this.roundLabel,
     required this.roundWindow,
+    required this.showRoundBadge,
     required this.progress,
-    required this.bulkSelectionEnabled,
-    required this.selectedCount,
-    required this.totalSelectable,
-    required this.onToggleBulk,
     required this.onStockCount,
-    required this.onSelectAll,
-    required this.onClearSelection,
+    required this.onResidentInfo,
+    required this.onMenuSelected,
     required this.onBack,
   });
 
@@ -1671,19 +2146,17 @@ class _ResidentHeader extends StatelessWidget {
   final String? allergies;
   final String roundLabel;
   final String roundWindow;
+  final bool showRoundBadge;
   final double progress;
-  final bool bulkSelectionEnabled;
-  final int selectedCount;
-  final int totalSelectable;
-  final VoidCallback onToggleBulk;
   final VoidCallback onStockCount;
-  final VoidCallback onSelectAll;
-  final VoidCallback onClearSelection;
+  final VoidCallback onResidentInfo;
+  final ValueChanged<_QuickNavAction> onMenuSelected;
   final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
     final hasAllergy = allergies?.trim().isNotEmpty == true;
+    final dobLabel = _formatDateDisplay(dateOfBirth);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1704,16 +2177,26 @@ class _ResidentHeader extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      residentName,
-                      style: GoogleFonts.nunitoSans(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                        color: const Color(0xFF163447),
+                    InkWell(
+                      onTap: onResidentInfo,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 2,
+                          vertical: 1,
+                        ),
+                        child: Text(
+                          residentName,
+                          style: GoogleFonts.nunitoSans(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF163447),
+                          ),
+                        ),
                       ),
                     ),
                     Text(
-                      '${dateOfBirth?.trim().isNotEmpty == true ? dateOfBirth!.trim() : 'DOB not recorded'} · $siteName',
+                      '${dobLabel ?? 'DOB not recorded'} · $siteName',
                       style: GoogleFonts.nunitoSans(
                         fontWeight: FontWeight.w700,
                         color: const Color(0xFF5A7382),
@@ -1722,41 +2205,30 @@ class _ResidentHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              TextButton.icon(
-                onPressed: onToggleBulk,
-                icon: Icon(
-                  bulkSelectionEnabled
-                      ? Icons.check_box_rounded
-                      : Icons.check_box_outline_blank_rounded,
-                ),
-                label: Text(bulkSelectionEnabled ? 'Selecting' : 'Select'),
+              PopupMenuButton<_QuickNavAction>(
+                onSelected: onMenuSelected,
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: _QuickNavAction.settings,
+                    child: Text('Settings'),
+                  ),
+                  PopupMenuItem(
+                    value: _QuickNavAction.about,
+                    child: Text('About'),
+                  ),
+                  PopupMenuItem(
+                    value: _QuickNavAction.help,
+                    child: Text('Help'),
+                  ),
+                  PopupMenuItem(
+                    value: _QuickNavAction.logout,
+                    child: Text('Log out'),
+                  ),
+                ],
+                icon: const Icon(Icons.more_vert_rounded),
               ),
             ],
           ),
-          if (bulkSelectionEnabled)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Row(
-                children: [
-                  Text(
-                    '$selectedCount selected',
-                    style: GoogleFonts.nunitoSans(
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF3F5D6C),
-                    ),
-                  ),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: totalSelectable == 0 ? null : onSelectAll,
-                    child: Text('Select all ($totalSelectable)'),
-                  ),
-                  TextButton(
-                    onPressed: onClearSelection,
-                    child: const Text('Clear'),
-                  ),
-                ],
-              ),
-            ),
           if (hasAllergy)
             Container(
               width: double.infinity,
@@ -1776,31 +2248,26 @@ class _ResidentHeader extends StatelessWidget {
               ),
             ),
           if (!hasAllergy)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(top: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFF7F4),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFA5D4C2)),
-              ),
+            Padding(
+              padding: const EdgeInsets.only(top: 8, left: 2),
               child: Text(
-                'No known allergies',
+                'Allergies: none known',
                 style: GoogleFonts.nunitoSans(
-                  color: const Color(0xFF245A43),
+                  color: const Color(0xFF4F6978),
                   fontWeight: FontWeight.w800,
                 ),
               ),
             ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              _headerBadge(
-                icon: Icons.schedule_rounded,
-                label: '$roundLabel Round · $roundWindow',
-              ),
-              const SizedBox(width: 8),
+              if (showRoundBadge)
+                _headerBadge(
+                  icon: Icons.schedule_rounded,
+                  label: '$roundLabel Round · $roundWindow',
+                ),
               OutlinedButton.icon(
                 onPressed: onStockCount,
                 icon: const Icon(Icons.inventory_2_outlined, size: 16),
@@ -1848,6 +2315,62 @@ class _ResidentHeader extends StatelessWidget {
       ),
     );
   }
+
+  String? _formatDateDisplay(String? raw) {
+    if (raw == null) return null;
+    final value = raw.trim();
+    if (value.isEmpty) return null;
+
+    final iso = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
+    if (iso != null) {
+      return '${iso.group(3)}-${iso.group(2)}-${iso.group(1)}';
+    }
+
+    final dmyMonth = RegExp(
+      r'^(\d{2})-([A-Za-z]{3})-(\d{4})$',
+    ).firstMatch(value);
+    if (dmyMonth != null) {
+      final month = _monthFromAbbrev(dmyMonth.group(2)!);
+      final dd = dmyMonth.group(1)!;
+      final yyyy = dmyMonth.group(3)!;
+      if (month != null) {
+        return '$dd-${month.toString().padLeft(2, '0')}-$yyyy';
+      }
+    }
+
+    return value;
+  }
+
+  int? _monthFromAbbrev(String month) {
+    switch (month.toLowerCase()) {
+      case 'jan':
+        return 1;
+      case 'feb':
+        return 2;
+      case 'mar':
+        return 3;
+      case 'apr':
+        return 4;
+      case 'may':
+        return 5;
+      case 'jun':
+        return 6;
+      case 'jul':
+        return 7;
+      case 'aug':
+        return 8;
+      case 'sep':
+        return 9;
+      case 'oct':
+        return 10;
+      case 'nov':
+        return 11;
+      case 'dec':
+        return 12;
+      default:
+        return null;
+    }
+  }
 }
 
 class _MedicationExecutionCard extends StatelessWidget {
@@ -1868,6 +2391,11 @@ class _MedicationExecutionCard extends StatelessWidget {
     required this.onConfirmTaken,
     required this.onConfirmRefused,
     required this.onConfirmWithheld,
+    required this.prnRequestStage,
+    required this.onStartPrnRequest,
+    required this.onPrnRequestYes,
+    required this.onPrnRequestNo,
+    required this.onSubmitPrnRequest,
     required this.nextBest,
     required this.aiSignals,
     required this.followUpDue,
@@ -1891,6 +2419,11 @@ class _MedicationExecutionCard extends StatelessWidget {
   final VoidCallback onConfirmTaken;
   final VoidCallback onConfirmRefused;
   final VoidCallback onConfirmWithheld;
+  final _PrnRequestStage prnRequestStage;
+  final VoidCallback onStartPrnRequest;
+  final VoidCallback onPrnRequestYes;
+  final VoidCallback onPrnRequestNo;
+  final VoidCallback onSubmitPrnRequest;
   final bool nextBest;
   final List<_AiSignal> aiSignals;
   final DateTime? followUpDue;
@@ -2066,6 +2599,21 @@ class _MedicationExecutionCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                        if (result?.staffName != null &&
+                            result!.staffName!.trim().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'By: ${result!.staffName!.trim()}',
+                              style: GoogleFonts.nunitoSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF52707E),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -2127,13 +2675,98 @@ class _MedicationExecutionCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Auto note is generated on administer and saved to MAR.',
+                  medication.prn
+                      ? 'PRN administration requires a note/reason.'
+                      : 'Auto note is generated on administer and saved to MAR.',
                   style: GoogleFonts.nunitoSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: const Color(0xFF5D7683),
                   ),
                 ),
+                if (medication.prn) const SizedBox(height: 8),
+                if (medication.prn && prnRequestStage == _PrnRequestStage.idle)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: onStartPrnRequest,
+                      icon: const Icon(Icons.add_alert_rounded, size: 16),
+                      label: const Text('Request PRN'),
+                    ),
+                  ),
+                if (medication.prn &&
+                    prnRequestStage == _PrnRequestStage.prompt)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FA),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFCFE0EA)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Do you want to request this PRN?',
+                          style: GoogleFonts.nunitoSans(
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF2A4B5C),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: onPrnRequestNo,
+                                child: const Text('No'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: onPrnRequestYes,
+                                child: const Text('Yes'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                if (medication.prn && prnRequestStage == _PrnRequestStage.ready)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FA),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFCFE0EA)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'PRN request ready to submit.',
+                            style: GoogleFonts.nunitoSans(
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF2A4B5C),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: onPrnRequestNo,
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: onSubmitPrnRequest,
+                          child: const Text('Request'),
+                        ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -2403,15 +3036,19 @@ class _MedicationResult {
     required this.timestamp,
     required this.note,
     required this.reason,
+    required this.staffName,
   });
 
   final RoundActionStatus status;
   final DateTime timestamp;
   final String? note;
   final String? reason;
+  final String? staffName;
 }
 
 enum _ExceptionAction { taken, refused, withheld }
+
+enum _QuickNavAction { settings, about, help, logout }
 
 class _ExceptionDecision {
   const _ExceptionDecision({

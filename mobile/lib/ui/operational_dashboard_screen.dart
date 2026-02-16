@@ -122,81 +122,13 @@ class _OperationalDashboardScreenState
   }
 
   Future<List<DemoResident>> _fetchResidentsConnected() async {
-    try {
-      return await _apiClient.fetchDemoResidents();
-    } catch (_) {
-      final rows = await _db.getActiveResidents();
-      return rows
-          .map(
-            (row) => DemoResident(
-              residentId: row.residentId,
-              firstName: row.firstName,
-              lastName: row.lastName,
-              status: row.status,
-              dateOfBirth: null,
-              siteName: AppDatabase.siteNameForResidentId(row.residentId),
-              addressLine1: null,
-              allergies: null,
-              specialPreferences: const [],
-            ),
-          )
-          .toList();
-    }
+    return _apiClient.fetchDemoResidents();
   }
 
   Future<List<DemoMedication>> _fetchMedicationsConnected(
     String residentId,
   ) async {
-    try {
-      return await _apiClient.fetchDemoMedications(residentId);
-    } catch (_) {
-      final rows = await _db.getActiveMedicationOrdersForResident(residentId);
-      return rows
-          .map(
-            (row) => DemoMedication(
-              orderId: row.orderId,
-              residentId: row.residentId,
-              medicationName: row.medicationName,
-              rawStrength: _strengthFromOrder(row.doseValue, row.doseUnit),
-              doseText: _strengthFromOrder(row.doseValue, row.doseUnit),
-              doseValue: row.doseValue,
-              doseUnit: row.doseUnit,
-              route: row.route,
-              instructions: null,
-              prn: false,
-              isControlledDrug: false,
-              frequency: row.frequency,
-              scheduledTimes: const [],
-              timingSlots: _inferTimingSlots(row.frequency),
-              timingTimes: const [],
-              status: row.status,
-            ),
-          )
-          .toList();
-    }
-  }
-
-  String? _strengthFromOrder(double? doseValue, String? doseUnit) {
-    if (doseValue == null) return null;
-    final formatted = doseValue.truncateToDouble() == doseValue
-        ? doseValue.toStringAsFixed(0)
-        : doseValue.toStringAsFixed(1);
-    final unit = doseUnit?.trim();
-    if (unit == null || unit.isEmpty) return formatted;
-    return '$formatted $unit';
-  }
-
-  List<String> _inferTimingSlots(String? frequency) {
-    if (frequency == null || frequency.trim().isEmpty) {
-      return const [];
-    }
-    final value = frequency.toLowerCase();
-    final output = <String>[];
-    if (value.contains('morning')) output.add('Morning');
-    if (value.contains('noon')) output.add('Noon');
-    if (value.contains('evening')) output.add('Evening');
-    if (value.contains('night')) output.add('Night');
-    return output;
+    return _apiClient.fetchDemoMedications(residentId);
   }
 
   Set<int> _roundIndicesForMedication(DemoMedication medication) {
@@ -274,6 +206,9 @@ class _OperationalDashboardScreenState
           siteName: bundle.resident.siteName,
           dateOfBirth: bundle.resident.dateOfBirth,
           allergies: bundle.resident.allergies,
+          preferences: bundle.resident.specialPreferences,
+          medicalConditions: const [],
+          additionalNotes: null,
           medications: bundle.medications,
           roundLabel: 'Resident Profile',
           roundWindow: 'All active medications',
@@ -296,7 +231,7 @@ class _OperationalDashboardScreenState
 
   String _todayLabel() {
     final now = DateTime.now();
-    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    return '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year.toString().padLeft(4, '0')}';
   }
 
   @override
