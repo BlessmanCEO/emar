@@ -2,6 +2,7 @@ use crate::AppState;
 use axum::{extract::{Path, State}, http::StatusCode, Json};
 use serde::Serialize;
 use sqlx::FromRow;
+use std::collections::HashMap;
 
 #[derive(Serialize, FromRow)]
 pub struct DemoResident {
@@ -30,6 +31,7 @@ pub struct DemoMedication {
     pub prn: bool,
     pub is_controlled_drug: bool,
     pub frequency: Option<String>,
+    pub scheduled_times: Vec<String>,
     pub timing_slots: Vec<String>,
     pub timing_times: Vec<String>,
     pub status: String,
@@ -89,16 +91,38 @@ pub async fn resident_medications(
          WHERE resident_id = $1 AND status = 'active'
          ORDER BY medication_name",
     )
-    .bind(resident_id)
+    .bind(&resident_id)
     .fetch_all(&state.db)
     .await
     .map_err(internal_error)?;
+
+    let scheduled_rows = sqlx::query_as::<_, (String, String)>(
+        "SELECT order_id, to_char(scheduled_at, 'HH24:MI') AS scheduled_time
+         FROM mar_entries
+         WHERE resident_id = $1
+           AND scheduled_at::date = CURRENT_DATE
+           AND status IN ('scheduled', 'administered', 'refused', 'missed', 'omitted')
+         ORDER BY scheduled_at",
+    )
+    .bind(&resident_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(internal_error)?;
+
+    let mut scheduled_by_order: HashMap<String, Vec<String>> = HashMap::new();
+    for (order_id, scheduled_time) in scheduled_rows {
+        let entry = scheduled_by_order.entry(order_id).or_default();
+        if !entry.iter().any(|value| value == &scheduled_time) {
+            entry.push(scheduled_time);
+        }
+    }
 
     let mapped = rows
         .into_iter()
         .map(|row| {
             let timing_slots = infer_timing_slots(row.frequency.as_deref(), row.instructions.as_deref());
             let timing_times = extract_clock_times(row.instructions.as_deref());
+            let scheduled_times = scheduled_by_order.remove(&row.order_id).unwrap_or_default();
             DemoMedication {
                 order_id: row.order_id,
                 resident_id: row.resident_id,
@@ -112,6 +136,7 @@ pub async fn resident_medications(
                 prn: row.prn,
                 is_controlled_drug: row.is_controlled_drug,
                 frequency: row.frequency,
+                scheduled_times,
                 timing_slots,
                 timing_times,
                 status: row.status,

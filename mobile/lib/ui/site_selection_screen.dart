@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'emar_screen.dart';
+import 'operational_dashboard_screen.dart';
 
 class SiteSelectionScreen extends StatefulWidget {
   const SiteSelectionScreen({super.key});
@@ -17,8 +17,10 @@ class _SiteSelectionScreenState extends State<SiteSelectionScreen> {
 
   void _continueToMar() {
     if (_selectedSite == null) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => EmarScreen(siteFilter: _selectedSite)),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OperationalDashboardScreen(siteFilter: _selectedSite!),
+      ),
     );
   }
 

@@ -1,291 +1,1274 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../db/app_database.dart';
 import '../sync/api_client.dart';
+
+enum RoundActionStatus { taken, refused, withheld }
+
+enum ResidentMedicationTab { scheduled, prn }
+
+class RoundExecutionResult {
+  const RoundExecutionResult({
+    required this.totalDue,
+    required this.completed,
+    required this.pending,
+    required this.taken,
+    required this.refused,
+    required this.withheld,
+    required this.prnFollowUpsScheduled,
+    required this.roundComplete,
+    required this.autoAdvance,
+  });
+
+  final int totalDue;
+  final int completed;
+  final int pending;
+  final int taken;
+  final int refused;
+  final int withheld;
+  final int prnFollowUpsScheduled;
+  final bool roundComplete;
+  final bool autoAdvance;
+}
+
+class RoundActorIdentity {
+  const RoundActorIdentity({
+    required this.orgId,
+    required this.actorUserId,
+    required this.deviceId,
+    this.staffName,
+    this.siteId,
+  });
+
+  final String orgId;
+  final String actorUserId;
+  final String deviceId;
+  final String? staffName;
+  final String? siteId;
+}
+
+class MedicationRoundInitialAction {
+  const MedicationRoundInitialAction({
+    required this.status,
+    required this.timestamp,
+    this.reason,
+    this.note,
+  });
+
+  final RoundActionStatus status;
+  final DateTime timestamp;
+  final String? reason;
+  final String? note;
+}
 
 class MedicationRoundScreen extends StatefulWidget {
   const MedicationRoundScreen({
     super.key,
+    required this.residentId,
     required this.residentName,
-    required this.roomLabel,
+    required this.siteName,
     required this.dateOfBirth,
-    required this.addressLine1,
     required this.allergies,
-    required this.specialPreferences,
     required this.medications,
+    required this.roundLabel,
+    required this.roundWindow,
+    required this.roundIndex,
+    required this.db,
+    required this.actorIdentity,
+    required this.roundKey,
+    this.prnOnlyMode = false,
+    this.showAllMedications = false,
+    this.autoAdvanceOnComplete = true,
+    this.initialActions = const {},
   });
 
+  final String residentId;
   final String residentName;
-  final String roomLabel;
+  final String siteName;
   final String? dateOfBirth;
-  final String? addressLine1;
   final String? allergies;
-  final List<String> specialPreferences;
   final List<DemoMedication> medications;
+  final String roundLabel;
+  final String roundWindow;
+  final int roundIndex;
+  final AppDatabase db;
+  final RoundActorIdentity actorIdentity;
+  final String roundKey;
+  final bool prnOnlyMode;
+  final bool showAllMedications;
+  final bool autoAdvanceOnComplete;
+  final Map<String, MedicationRoundInitialAction> initialActions;
 
   @override
   State<MedicationRoundScreen> createState() => _MedicationRoundScreenState();
 }
 
 class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
-  static const _tabs = ['Morning', 'Noon', 'Evening', 'Night', 'PRN'];
-  static const _regularTabs = ['Morning', 'Noon', 'Evening', 'Night'];
-  static const _timeWindows = {
-    'Morning': '08:00 - 09:00',
-    'Noon': '12:00 - 13:00',
-    'Evening': '18:00 - 19:00',
-    'Night': '21:00 - 22:00',
-    'PRN': 'As required',
-  };
-  int _tabIndex = 0;
+  static const _roundLabels = ['Morning', 'Noon', 'Evening', 'Night'];
+
+  final Map<String, _MedicationResult> _results = {};
+  final Map<String, DateTime> _prnFollowUpDue = {};
+  final Set<String> _selectedMedicationIds = {};
+  final Map<String, String> _doseInputByOrder = {};
+  final Map<String, String> _noteInputByOrder = {};
+  final Map<String, TimeOfDay> _timeInputByOrder = {};
+  final Map<String, String> _stockCountByOrder = {};
+  final ScrollController _listController = ScrollController();
+  Timer? _nextFocusTimer;
+  bool _bulkSelectionEnabled = false;
+  bool _autoAdvanceTriggered = false;
+  String? _nextBestOrderId;
   String? _expandedMedicationId;
-  late final TextEditingController _dosageController;
-  late final TextEditingController _noteController;
-  late final TextEditingController _chainNoteController;
-  DateTime _selectedDateTime = DateTime.now();
-  String _administeredBy = 'Staff Member';
-  bool _chainMode = false;
-  final Set<String> _chainSelectedIds = {};
-  final Map<String, _TakenRecord> _takenByMedication = {};
-  final Map<String, _SkippedRecord> _skippedByMedication = {};
+  ResidentMedicationTab _residentTab = ResidentMedicationTab.scheduled;
 
   @override
   void initState() {
     super.initState();
-    _dosageController = TextEditingController();
-    _noteController = TextEditingController();
-    _chainNoteController = TextEditingController();
-    _loadAdministeredBy();
-  }
-
-  Future<void> _loadAdministeredBy() async {
-    final prefs = await SharedPreferences.getInstance();
-    final username = prefs.getString('username')?.trim();
-    if (!mounted) return;
-    if (username != null && username.isNotEmpty) {
-      setState(() {
-        _administeredBy = username;
-      });
-    }
+    _hydrateInitialActions();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _jumpToNextBestMedication();
+    });
   }
 
   @override
   void dispose() {
-    _dosageController.dispose();
-    _noteController.dispose();
-    _chainNoteController.dispose();
+    _nextFocusTimer?.cancel();
+    _listController.dispose();
     super.dispose();
   }
 
-  void _toggleChainMode() {
-    setState(() {
-      _chainMode = !_chainMode;
-      _expandedMedicationId = null;
-      _chainSelectedIds.clear();
-      _chainNoteController.clear();
-    });
-  }
+  void _hydrateInitialActions() {
+    if (widget.initialActions.isEmpty) return;
 
-  void _toggleChainSelection(DemoMedication medication) {
-    setState(() {
-      if (_chainSelectedIds.contains(medication.orderId)) {
-        _chainSelectedIds.remove(medication.orderId);
-      } else {
-        _chainSelectedIds.add(medication.orderId);
-      }
-    });
-  }
-
-  Future<void> _applyChainAction(_ChainAction action) async {
-    if (_chainSelectedIds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select medications first.')),
+    for (final entry in widget.initialActions.entries) {
+      final action = entry.value;
+      _results[entry.key] = _MedicationResult(
+        status: action.status,
+        timestamp: action.timestamp,
+        note: action.note,
+        reason: action.reason,
       );
-      return;
-    }
 
-    final note = _chainNoteController.text.trim();
-    if (note.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter one general note.')),
-      );
-      return;
-    }
-
-    final now = DateTime.now();
-    setState(() {
-      for (final id in _chainSelectedIds) {
-        if (action == _ChainAction.taken) {
-          _takenByMedication[id] = _TakenRecord(
-            administeredAt: now,
-            administeredBy: _administeredBy,
-            note: note,
-          );
-          _skippedByMedication.remove(id);
-        } else {
-          _skippedByMedication[id] = _SkippedRecord(
-            skippedAt: now,
-            skippedBy: _administeredBy,
-            reasonType: _SkipReasonType.refused,
-            reasonText: 'Refused: $note',
-          );
-          _takenByMedication.remove(id);
+      DemoMedication? medication;
+      for (final med in widget.medications) {
+        if (med.orderId == entry.key) {
+          medication = med;
+          break;
         }
       }
-      _chainSelectedIds.clear();
-      _chainNoteController.clear();
+      if (medication != null &&
+          medication.prn &&
+          action.status == RoundActionStatus.taken) {
+        _prnFollowUpDue[entry.key] = action.timestamp.add(
+          const Duration(minutes: 45),
+        );
+      }
+    }
+  }
+
+  void _jumpToNextBestMedication() {
+    DemoMedication? next;
+    for (final medication in _sortedMedications) {
+      if (!_results.containsKey(medication.orderId)) {
+        next = medication;
+        break;
+      }
+    }
+
+    if (next == null) {
+      setState(() {
+        _nextBestOrderId = null;
+      });
+      return;
+    }
+    final target = next;
+
+    final targetIndex = _sortedMedications.indexWhere(
+      (med) => med.orderId == target.orderId,
+    );
+    if (targetIndex < 0) return;
+
+    if (mounted) {
+      setState(() {
+        _nextBestOrderId = target.orderId;
+      });
+    }
+
+    _nextFocusTimer?.cancel();
+    _nextFocusTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted) return;
+      setState(() {
+        if (_nextBestOrderId == target.orderId) {
+          _nextBestOrderId = null;
+        }
+      });
     });
 
-    final label = action == _ChainAction.taken ? 'taken' : 'refused';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Selected medications marked as $label.')),
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_listController.hasClients) return;
+      final offset = (targetIndex * 96.0).clamp(
+        0.0,
+        _listController.position.maxScrollExtent,
+      );
+      _listController.animateTo(
+        offset,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  Future<void> _persistRoundAction(
+    DemoMedication medication,
+    _MedicationResult result,
+  ) async {
+    final status = switch (result.status) {
+      RoundActionStatus.taken => 'given',
+      RoundActionStatus.refused => 'refused',
+      RoundActionStatus.withheld => 'withheld',
+    };
+
+    String? reasonCode;
+    if ((result.reason ?? '').trim().isNotEmpty) {
+      reasonCode = result.reason!
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+          .replaceAll(RegExp(r'_+'), '_')
+          .replaceAll(RegExp(r'^_|_$'), '');
+      if (reasonCode.isEmpty) {
+        reasonCode = null;
+      }
+    }
+
+    await widget.db.recordRoundAction(
+      orgId: widget.actorIdentity.orgId,
+      actorUserId: widget.actorIdentity.actorUserId,
+      deviceId: widget.actorIdentity.deviceId,
+      residentId: widget.residentId,
+      orderId: medication.orderId,
+      roundKey: widget.roundKey,
+      status: status,
+      reasonCode: reasonCode,
+      notes: result.note,
+      occurredAt: result.timestamp,
+      siteId: widget.actorIdentity.siteId,
     );
   }
 
-  void _selectTab(int index) {
+  String get _staffName {
+    final fromIdentity = widget.actorIdentity.staffName?.trim();
+    if (fromIdentity != null && fromIdentity.isNotEmpty) {
+      return fromIdentity;
+    }
+    return widget.actorIdentity.actorUserId;
+  }
+
+  String _autoTakenNoteForSingle(DemoMedication medication) {
+    return 'Staff $_staffName administered ${medication.medicationName}.';
+  }
+
+  String _autoTakenNoteForMany(List<DemoMedication> medications) {
+    final names = medications.map((med) => med.medicationName).toList();
+    if (names.isEmpty) return '';
+    return 'Staff $_staffName administered ${names.join(', ')}.';
+  }
+
+  List<DemoMedication> _pendingSelectableMedications() {
+    return _sortedMedications
+        .where((medication) => !_results.containsKey(medication.orderId))
+        .toList();
+  }
+
+  void _selectAllPending() {
+    final pending = _pendingSelectableMedications();
     setState(() {
-      _tabIndex = index;
-      _expandedMedicationId = null;
+      _selectedMedicationIds
+        ..clear()
+        ..addAll(pending.map((medication) => medication.orderId));
     });
   }
 
-  void _toggleMedication(DemoMedication medication) {
+  void _clearSelection() {
+    setState(() {
+      _selectedMedicationIds.clear();
+    });
+  }
+
+  RoundExecutionResult _buildResult({required bool autoAdvance}) {
+    final due = _dueMedications;
+    final completed = due.where((med) => _results.containsKey(med.orderId));
+    var taken = 0;
+    var refused = 0;
+    var withheld = 0;
+    for (final med in completed) {
+      final result = _results[med.orderId];
+      if (result == null) continue;
+      switch (result.status) {
+        case RoundActionStatus.taken:
+          taken += 1;
+          break;
+        case RoundActionStatus.refused:
+          refused += 1;
+          break;
+        case RoundActionStatus.withheld:
+          withheld += 1;
+          break;
+      }
+    }
+    return RoundExecutionResult(
+      totalDue: due.length,
+      completed: completed.length,
+      pending: due.length - completed.length,
+      taken: taken,
+      refused: refused,
+      withheld: withheld,
+      prnFollowUpsScheduled: _prnFollowUpDue.length,
+      roundComplete: due.isNotEmpty && completed.length == due.length,
+      autoAdvance: autoAdvance,
+    );
+  }
+
+  List<DemoMedication> get _visibleMedications {
+    return widget.medications.where((med) {
+      if (widget.prnOnlyMode) {
+        return med.prn;
+      }
+
+      if (_residentTab == ResidentMedicationTab.prn) {
+        return med.prn;
+      }
+
+      if (widget.showAllMedications) {
+        return !med.prn;
+      }
+
+      return !med.prn &&
+          _roundIndicesForMedication(med).contains(widget.roundIndex);
+    }).toList();
+  }
+
+  List<DemoMedication> get _allScheduledMedications {
+    return widget.medications.where((med) => !med.prn).toList();
+  }
+
+  List<DemoMedication> get _allPrnMedications {
+    return widget.medications.where((med) => med.prn).toList();
+  }
+
+  int get _scheduledTabCount {
+    if (widget.showAllMedications) {
+      return _allScheduledMedications.length;
+    }
+    if (widget.prnOnlyMode) {
+      return 0;
+    }
+    return _allScheduledMedications
+        .where(
+          (med) => _roundIndicesForMedication(med).contains(widget.roundIndex),
+        )
+        .length;
+  }
+
+  List<DemoMedication> get _dueMedications {
+    if (!widget.showAllMedications && !widget.prnOnlyMode) {
+      return _allScheduledMedications
+          .where(
+            (med) =>
+                _roundIndicesForMedication(med).contains(widget.roundIndex),
+          )
+          .toList();
+    }
+    if (widget.showAllMedications) {
+      return _allScheduledMedications;
+    }
+    if (widget.prnOnlyMode) {
+      return _visibleMedications;
+    }
+    return _visibleMedications.where((med) => !med.prn).toList();
+  }
+
+  List<DemoMedication> get _sortedMedications {
+    final meds = [..._visibleMedications];
+    meds.sort((a, b) {
+      final aPriority = _priorityScore(a);
+      final bPriority = _priorityScore(b);
+      if (aPriority != bPriority) {
+        return aPriority.compareTo(bPriority);
+      }
+      return a.medicationName.toLowerCase().compareTo(
+        b.medicationName.toLowerCase(),
+      );
+    });
+    return meds;
+  }
+
+  int _priorityScore(DemoMedication medication) {
+    if (_results.containsKey(medication.orderId)) return 4;
+    if (_isOverdue(medication)) return 0;
+    if (_isHighRisk(medication)) return 1;
+    if (medication.prn) return 3;
+    return 2;
+  }
+
+  bool _isHighRisk(DemoMedication medication) {
+    if (medication.isControlledDrug) return true;
+    final name = medication.medicationName.toLowerCase();
+    return name.contains('warfarin') ||
+        name.contains('insulin') ||
+        name.contains('morphine');
+  }
+
+  bool _isOverdue(DemoMedication medication) {
+    if (medication.prn) return false;
+    if (_results.containsKey(medication.orderId)) return false;
+    if (widget.showAllMedications || widget.prnOnlyMode) return false;
+    final earliest = _earliestRoundIndex(medication);
+    if (earliest == null) return false;
+    return earliest < widget.roundIndex &&
+        !_roundIndicesForMedication(medication).contains(widget.roundIndex);
+  }
+
+  bool _isOutsideCurrentWindow(DemoMedication medication) {
+    if (medication.prn) return false;
+    if (widget.showAllMedications || widget.prnOnlyMode) return false;
+    return !_roundIndicesForMedication(medication).contains(widget.roundIndex);
+  }
+
+  bool _requiresExceptionForTaken(DemoMedication medication) {
+    if (medication.prn) return true;
+    if (medication.isControlledDrug) return true;
+    if (_isOutsideCurrentWindow(medication)) return true;
+    return false;
+  }
+
+  Set<int> _roundIndicesForMedication(DemoMedication medication) {
+    final output = <int>{};
+
+    for (final value in medication.scheduledTimes) {
+      final round = _roundFromClock(value);
+      if (round != null) output.add(round);
+    }
+
+    for (final value in medication.timingTimes) {
+      final round = _roundFromClock(value);
+      if (round != null) output.add(round);
+    }
+
+    for (final slot in medication.timingSlots) {
+      final idx = _roundLabels.indexOf(slot);
+      if (idx != -1) output.add(idx);
+    }
+
+    return output;
+  }
+
+  int? _roundFromClock(String value) {
+    final hour = int.tryParse(value.split(':').first);
+    if (hour == null) return null;
+    if (hour < 11) return 0;
+    if (hour < 16) return 1;
+    if (hour < 20) return 2;
+    return 3;
+  }
+
+  int? _earliestRoundIndex(DemoMedication medication) {
+    final rounds = _roundIndicesForMedication(medication);
+    if (rounds.isEmpty) return null;
+    return rounds.reduce((a, b) => a < b ? a : b);
+  }
+
+  Future<void> _handleTapMedication(DemoMedication medication) async {
+    if (_bulkSelectionEnabled) {
+      _toggleMedicationSelection(medication.orderId);
+      return;
+    }
+
+    if (_results.containsKey(medication.orderId)) {
+      return;
+    }
+
     setState(() {
       if (_expandedMedicationId == medication.orderId) {
         _expandedMedicationId = null;
+      } else {
+        _expandedMedicationId = medication.orderId;
+        _doseInputByOrder.putIfAbsent(
+          medication.orderId,
+          () => _doseSummaryFor(medication),
+        );
+        _noteInputByOrder.putIfAbsent(medication.orderId, () => '');
+        _timeInputByOrder.putIfAbsent(medication.orderId, TimeOfDay.now);
+      }
+    });
+  }
+
+  Future<void> _confirmFromExpanded(
+    DemoMedication medication,
+    RoundActionStatus action,
+  ) async {
+    if (_results.containsKey(medication.orderId)) {
+      return;
+    }
+
+    final doseInput = (_doseInputByOrder[medication.orderId] ?? '').trim();
+    final noteInput = (_noteInputByOrder[medication.orderId] ?? '').trim();
+    final selectedTime =
+        _timeInputByOrder[medication.orderId] ?? TimeOfDay.now();
+    final occurredAt = _dateTimeForTimeOfDay(selectedTime);
+
+    if (action == RoundActionStatus.taken) {
+      if (medication.prn && noteInput.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('PRN administration requires a note/reason.'),
+          ),
+        );
         return;
       }
 
-      _expandedMedicationId = medication.orderId;
-      _selectedDateTime = DateTime.now();
-      _dosageController.text = _doseValueFor(medication);
-      _noteController.clear();
-    });
-  }
-
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDateTime,
-      firstDate: now.subtract(const Duration(days: 365)),
-      lastDate: now.add(const Duration(days: 365)),
-    );
-    if (picked == null) return;
-    setState(() {
-      _selectedDateTime = DateTime(
-        picked.year,
-        picked.month,
-        picked.day,
-        _selectedDateTime.hour,
-        _selectedDateTime.minute,
+      final composed = _composeTakenNote(
+        medication,
+        doseInput: doseInput,
+        extraNote: noteInput,
       );
-    });
-  }
 
-  Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(_selectedDateTime),
-    );
-    if (picked == null) return;
-    setState(() {
-      _selectedDateTime = DateTime(
-        _selectedDateTime.year,
-        _selectedDateTime.month,
-        _selectedDateTime.day,
-        picked.hour,
-        picked.minute,
+      if (_requiresExceptionForTaken(medication)) {
+        final decision = await _showExceptionSheet(
+          medications: [medication],
+          initialAction: _ExceptionAction.taken,
+          initialNote: medication.prn ? noteInput : composed,
+          requireTakenNote: medication.prn,
+        );
+        if (decision == null || !mounted) return;
+        _applyDecision(
+          [medication],
+          decision,
+          showUndo: false,
+          occurredAt: occurredAt,
+        );
+      } else {
+        _recordResult(
+          medication,
+          status: RoundActionStatus.taken,
+          note: composed,
+          reason: null,
+          occurredAt: occurredAt,
+        );
+      }
+    } else {
+      _recordResult(
+        medication,
+        status: action,
+        note: noteInput.isEmpty ? null : noteInput,
+        reason: null,
+        occurredAt: occurredAt,
       );
-    });
-  }
+    }
 
-  Future<void> _handleSkip(DemoMedication medication) async {
-    final result = await _showSkipReasonPrompt();
-    if (result == null) return;
     if (!mounted) return;
-
     setState(() {
-      _skippedByMedication[medication.orderId] = _SkippedRecord(
-        skippedAt: _selectedDateTime,
-        skippedBy: _administeredBy,
-        reasonType: result.type,
-        reasonText: result.reasonText,
-      );
-      _takenByMedication.remove(medication.orderId);
       _expandedMedicationId = null;
-      _noteController.clear();
+      _selectedMedicationIds.remove(medication.orderId);
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Skipped ${medication.medicationName}: ${result.reasonText}.',
-        ),
-      ),
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text('${medication.medicationName} updated.')),
+      );
+
+    _jumpToNextBestMedication();
+    _maybeAutoAdvance();
+  }
+
+  String _composeTakenNote(
+    DemoMedication medication, {
+    required String doseInput,
+    required String extraNote,
+  }) {
+    if (medication.prn) {
+      return extraNote;
+    }
+
+    final buffer = StringBuffer();
+    buffer.write(_autoTakenNoteForSingle(medication));
+    if (doseInput.isNotEmpty) {
+      buffer.write(' Dose verified: $doseInput.');
+    }
+    if (extraNote.isNotEmpty) {
+      buffer.write(' $extraNote');
+    }
+    return buffer.toString();
+  }
+
+  DateTime _dateTimeForTimeOfDay(TimeOfDay time) {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day, time.hour, time.minute);
+  }
+
+  Future<TimeOfDay?> _pickAdministrationTime({TimeOfDay? initialTime}) async {
+    final now = TimeOfDay.now();
+    return showTimePicker(
+      context: context,
+      initialTime: initialTime ?? now,
+      helpText: 'Set administration time',
     );
   }
 
-  Future<void> _handleTake(DemoMedication medication) async {
-    final note = _noteController.text.trim();
-    if (note.isEmpty) {
+  String _formatTimeOfDay(TimeOfDay value) {
+    final hh = value.hour.toString().padLeft(2, '0');
+    final mm = value.minute.toString().padLeft(2, '0');
+    return '$hh:$mm';
+  }
+
+  Future<void> _openStockCountSheet() async {
+    final medications = _sortedMedications;
+    if (medications.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a note before confirming.')),
+        const SnackBar(
+          content: Text('No medications available for stock count.'),
+        ),
       );
       return;
     }
 
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        final draft = Map<String, String>.from(_stockCountByOrder);
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            var mismatchCount = 0;
+            for (final medication in medications) {
+              final expected = (_stockCountByOrder[medication.orderId] ?? '')
+                  .trim();
+              final counted = (draft[medication.orderId] ?? '').trim();
+              if (expected.isNotEmpty &&
+                  counted.isNotEmpty &&
+                  expected != counted) {
+                mismatchCount += 1;
+              }
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 8,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 12,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Stock Count',
+                        style: GoogleFonts.nunitoSans(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF163447),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Expected vs counted table for this resident.',
+                        style: GoogleFonts.nunitoSans(
+                          color: const Color(0xFF5D7683),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEAF3F8),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFCFDFE9)),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 6,
+                            child: Text(
+                              'Medication',
+                              style: GoogleFonts.nunitoSans(
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF274757),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'Expected',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.nunitoSans(
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF274757),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              'Counted',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.nunitoSans(
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF274757),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: medications.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 6),
+                        itemBuilder: (context, index) {
+                          final med = medications[index];
+                          final expected =
+                              (_stockCountByOrder[med.orderId] ?? '').trim();
+                          final counted = (draft[med.orderId] ?? '').trim();
+                          final mismatch =
+                              expected.isNotEmpty &&
+                              counted.isNotEmpty &&
+                              expected != counted;
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: mismatch
+                                  ? const Color(0xFFFFF4E9)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: mismatch
+                                    ? const Color(0xFFE8B77E)
+                                    : const Color(0xFFD7E3EB),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 6,
+                                  child: Text(
+                                    med.medicationName,
+                                    style: GoogleFonts.nunitoSans(
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF274757),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    expected.isEmpty ? '--' : expected,
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.nunitoSans(
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF355563),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 3,
+                                  child: TextFormField(
+                                    initialValue: draft[med.orderId] ?? '',
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    decoration: InputDecoration(
+                                      hintText: 'Count',
+                                      isDense: true,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 10,
+                                          ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    onChanged: (value) {
+                                      setModalState(() {
+                                        draft[med.orderId] = value;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (mismatchCount > 0)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '$mismatchCount mismatch(es) against expected count.',
+                          style: GoogleFonts.nunitoSans(
+                            color: const Color(0xFF9A5A1F),
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    if (mismatchCount > 0) const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () {
+                          setState(() {
+                            _stockCountByOrder
+                              ..clear()
+                              ..addAll(draft);
+                          });
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Stock count captured for this resident.',
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Save stock count'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<bool> _handleSwipeMedication(
+    DemoMedication medication,
+    DismissDirection direction,
+  ) async {
+    if (_results.containsKey(medication.orderId)) {
+      return false;
+    }
+
+    final initialAction = direction == DismissDirection.startToEnd
+        ? _ExceptionAction.taken
+        : _ExceptionAction.refused;
+
+    final decision = await _showExceptionSheet(
+      medications: [medication],
+      initialAction: initialAction,
+      initialNote: initialAction == _ExceptionAction.taken
+          ? (medication.prn ? null : _autoTakenNoteForSingle(medication))
+          : null,
+      requireTakenNote:
+          initialAction == _ExceptionAction.taken && medication.prn,
+    );
+    if (decision == null || !mounted) {
+      return false;
+    }
+    _applyDecision([medication], decision, showUndo: false);
+    return false;
+  }
+
+  void _recordResult(
+    DemoMedication medication, {
+    required RoundActionStatus status,
+    required String? note,
+    required String? reason,
+    DateTime? occurredAt,
+  }) {
+    final now = occurredAt ?? DateTime.now();
     setState(() {
-      _takenByMedication[medication.orderId] = _TakenRecord(
-        administeredAt: _selectedDateTime,
-        administeredBy: _administeredBy,
+      _results[medication.orderId] = _MedicationResult(
+        status: status,
+        timestamp: now,
         note: note,
+        reason: reason,
       );
-      _skippedByMedication.remove(medication.orderId);
-      _expandedMedicationId = null;
-      _noteController.clear();
+      if (status == RoundActionStatus.taken && medication.prn) {
+        _prnFollowUpDue[medication.orderId] = now.add(
+          const Duration(minutes: 45),
+        );
+      }
+      if (status != RoundActionStatus.taken) {
+        _prnFollowUpDue.remove(medication.orderId);
+      }
+      _selectedMedicationIds.remove(medication.orderId);
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Taken at ${_formatTime(_selectedDateTime)} by $_administeredBy.',
+    final saved = _results[medication.orderId];
+    if (saved != null) {
+      unawaited(
+        _persistRoundAction(medication, saved).catchError((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Saved locally, sync queue write failed.'),
+            ),
+          );
+        }),
+      );
+    }
+  }
+
+  void _applyDecision(
+    List<DemoMedication> medications,
+    _ExceptionDecision decision, {
+    required bool showUndo,
+    DateTime? occurredAt,
+  }) {
+    final extraNote = decision.note?.trim() ?? '';
+    if (decision.action == _ExceptionAction.taken &&
+        medications.any((med) => med.prn) &&
+        extraNote.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('PRN administration requires a note/reason.'),
+        ),
+      );
+      return;
+    }
+
+    final autoTakenNote = decision.action == _ExceptionAction.taken
+        ? _autoTakenNoteForMany(medications.where((med) => !med.prn).toList())
+        : null;
+    final combinedTakenNote = extraNote.isEmpty
+        ? autoTakenNote
+        : (autoTakenNote == null || autoTakenNote.isEmpty)
+        ? extraNote
+        : '$autoTakenNote $extraNote';
+
+    for (final medication in medications) {
+      final noteForMedication = decision.action == _ExceptionAction.taken
+          ? (medication.prn ? extraNote : combinedTakenNote)
+          : decision.note;
+
+      _recordResult(
+        medication,
+        status: _mapExceptionAction(decision.action),
+        note: noteForMedication,
+        reason: decision.reason,
+        occurredAt: occurredAt,
+      );
+    }
+
+    if (showUndo && medications.length == 1) {
+      final target = medications.first;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 5),
+            content: Text('${_actionLabel(decision.action)} - Undo (5s)'),
+            action: SnackBarAction(
+              label: 'Undo',
+              onPressed: () {
+                if (!mounted) return;
+                setState(() {
+                  _results.remove(target.orderId);
+                  _prnFollowUpDue.remove(target.orderId);
+                });
+              },
+            ),
+          ),
+        );
+    } else {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('${medications.length} item(s) updated.')),
+        );
+    }
+
+    _jumpToNextBestMedication();
+    _maybeAutoAdvance();
+  }
+
+  RoundActionStatus _mapExceptionAction(_ExceptionAction action) {
+    switch (action) {
+      case _ExceptionAction.taken:
+        return RoundActionStatus.taken;
+      case _ExceptionAction.refused:
+        return RoundActionStatus.refused;
+      case _ExceptionAction.withheld:
+        return RoundActionStatus.withheld;
+    }
+  }
+
+  String _actionLabel(_ExceptionAction action) {
+    switch (action) {
+      case _ExceptionAction.taken:
+        return 'Taken';
+      case _ExceptionAction.refused:
+        return 'Refused';
+      case _ExceptionAction.withheld:
+        return 'Withheld';
+    }
+  }
+
+  void _maybeAutoAdvance() {
+    if (!widget.autoAdvanceOnComplete) return;
+    if (_autoAdvanceTriggered) return;
+    final due = _dueMedications;
+    if (due.isEmpty) return;
+    final done = due.where((med) => _results.containsKey(med.orderId)).length;
+    if (done != due.length) return;
+
+    _autoAdvanceTriggered = true;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          duration: Duration(milliseconds: 900),
+          content: Text('Resident complete. Opening next resident...'),
+        ),
+      );
+    Future.delayed(const Duration(milliseconds: 650), () {
+      if (!mounted) return;
+      Navigator.of(context).pop(_buildResult(autoAdvance: true));
+    });
+  }
+
+  Future<void> _openMedicationInfo(DemoMedication medication) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        final tags = _aiSignals(medication);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  medication.medicationName,
+                  style: GoogleFonts.nunitoSans(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF163447),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _infoRow('Dose', _doseSummaryFor(medication)),
+                _infoRow(
+                  'Route',
+                  medication.route?.trim().isNotEmpty == true
+                      ? medication.route!.trim()
+                      : 'Not specified',
+                ),
+                _infoRow(
+                  'Frequency',
+                  medication.frequency?.trim().isNotEmpty == true
+                      ? medication.frequency!.trim()
+                      : 'Not specified',
+                ),
+                _infoRow(
+                  'Instructions',
+                  medication.instructions?.trim().isNotEmpty == true
+                      ? medication.instructions!.trim()
+                      : 'No additional instruction',
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'MedAI signals',
+                  style: GoogleFonts.nunitoSans(
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF2B4C5E),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                if (tags.isEmpty)
+                  Text(
+                    'No active clinical flags for this medication.',
+                    style: GoogleFonts.nunitoSans(
+                      color: const Color(0xFF5C7482),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                if (tags.isNotEmpty)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: tags
+                        .map(
+                          (tag) => _SignalBadge(
+                            icon: tag.icon,
+                            label: tag.label,
+                            tone: tag.tone,
+                          ),
+                        )
+                        .toList(),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _infoRow(String title, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: RichText(
+        text: TextSpan(
+          style: GoogleFonts.nunitoSans(
+            fontSize: 14,
+            color: const Color(0xFF375666),
+            fontWeight: FontWeight.w700,
+          ),
+          children: [
+            TextSpan(
+              text: '$title: ',
+              style: GoogleFonts.nunitoSans(
+                fontWeight: FontWeight.w900,
+                color: const Color(0xFF1E3F52),
+              ),
+            ),
+            TextSpan(text: value),
+          ],
         ),
       ),
     );
   }
 
-  Future<_SkipReasonResult?> _showSkipReasonPrompt() {
-    return showModalBottomSheet<_SkipReasonResult>(
+  void _toggleMedicationSelection(String orderId) {
+    setState(() {
+      if (_selectedMedicationIds.contains(orderId)) {
+        _selectedMedicationIds.remove(orderId);
+      } else {
+        _selectedMedicationIds.add(orderId);
+      }
+    });
+  }
+
+  Future<void> _applyBulkAction(_ExceptionAction action) async {
+    final selected = _sortedMedications
+        .where((med) => _selectedMedicationIds.contains(med.orderId))
+        .where((med) => !_results.containsKey(med.orderId))
+        .toList();
+    if (selected.isEmpty) {
+      return;
+    }
+
+    _ExceptionDecision? decision;
+    DateTime? bulkOccurredAt;
+
+    if (action == _ExceptionAction.taken) {
+      final pickedTime = await _pickAdministrationTime();
+      if (pickedTime == null) return;
+      bulkOccurredAt = _dateTimeForTimeOfDay(pickedTime);
+
+      final requiresException = selected.any(_requiresExceptionForTaken);
+      if (!requiresException) {
+        final autoNote = _autoTakenNoteForMany(selected);
+        for (final med in selected) {
+          _recordResult(
+            med,
+            status: RoundActionStatus.taken,
+            note: autoNote,
+            reason: null,
+            occurredAt: bulkOccurredAt,
+          );
+        }
+      } else {
+        decision = await _showExceptionSheet(
+          medications: selected,
+          initialAction: _ExceptionAction.taken,
+          initialNote: selected.any((med) => med.prn)
+              ? null
+              : _autoTakenNoteForMany(selected),
+          requireTakenNote: selected.any((med) => med.prn),
+        );
+      }
+    } else {
+      decision = await _showExceptionSheet(
+        medications: selected,
+        initialAction: action,
+      );
+    }
+
+    if (!mounted) return;
+
+    if (decision != null) {
+      _applyDecision(
+        selected,
+        decision,
+        showUndo: false,
+        occurredAt: bulkOccurredAt,
+      );
+    }
+
+    if (decision == null && action == _ExceptionAction.taken) {
+      setState(() {
+        _selectedMedicationIds.clear();
+        _bulkSelectionEnabled = false;
+      });
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('${selected.length} item(s) marked taken.')),
+        );
+      _jumpToNextBestMedication();
+      _maybeAutoAdvance();
+    }
+
+    if (decision != null) {
+      setState(() {
+        _selectedMedicationIds.clear();
+        _bulkSelectionEnabled = false;
+      });
+    }
+  }
+
+  Future<_ExceptionDecision?> _showExceptionSheet({
+    required List<DemoMedication> medications,
+    required _ExceptionAction initialAction,
+    String? initialNote,
+    bool requireTakenNote = false,
+  }) {
+    return showModalBottomSheet<_ExceptionDecision>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
+      showDragHandle: true,
       builder: (context) {
-        var selectedType = _SkipReasonType.refused;
-        final reasonController = TextEditingController();
+        var selectedAction = initialAction;
+        final noteController = TextEditingController(text: initialNote ?? '');
 
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final requiresText =
-                selectedType == _SkipReasonType.refused ||
-                selectedType == _SkipReasonType.other;
-
-            String defaultReason() {
-              return switch (selectedType) {
-                _SkipReasonType.refused => 'Refused',
-                _SkipReasonType.outOfService => 'Out of service',
-                _SkipReasonType.other => 'Other',
-              };
-            }
-
             return Padding(
               padding: EdgeInsets.only(
                 left: 16,
                 right: 16,
-                top: 16,
+                top: 6,
                 bottom: MediaQuery.of(context).viewInsets.bottom + 16,
               ),
               child: Column(
@@ -293,52 +1276,58 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Reason for Skip',
+                    medications.length == 1
+                        ? 'Exception Flow'
+                        : 'Bulk Exception Flow (${medications.length})',
                     style: GoogleFonts.nunitoSans(
                       fontSize: 22,
                       fontWeight: FontWeight.w900,
-                      color: const Color(0xFF183141),
+                      color: const Color(0xFF163447),
                     ),
                   ),
                   const SizedBox(height: 10),
-                  _SkipReasonOption(
-                    label: 'Refused',
-                    value: _SkipReasonType.refused,
-                    groupValue: selectedType,
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setModalState(() => selectedType = value);
-                    },
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _actionChip(
+                        label: 'Taken',
+                        selected: selectedAction == _ExceptionAction.taken,
+                        onTap: () {
+                          setModalState(() {
+                            selectedAction = _ExceptionAction.taken;
+                          });
+                        },
+                      ),
+                      _actionChip(
+                        label: 'Refused',
+                        selected: selectedAction == _ExceptionAction.refused,
+                        onTap: () {
+                          setModalState(() {
+                            selectedAction = _ExceptionAction.refused;
+                          });
+                        },
+                      ),
+                      _actionChip(
+                        label: 'Withheld',
+                        selected: selectedAction == _ExceptionAction.withheld,
+                        onTap: () {
+                          setModalState(() {
+                            selectedAction = _ExceptionAction.withheld;
+                          });
+                        },
+                      ),
+                    ],
                   ),
-                  _SkipReasonOption(
-                    label: 'Out of service',
-                    value: _SkipReasonType.outOfService,
-                    groupValue: selectedType,
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setModalState(() => selectedType = value);
-                    },
-                  ),
-                  _SkipReasonOption(
-                    label: 'Other',
-                    value: _SkipReasonType.other,
-                    groupValue: selectedType,
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setModalState(() => selectedType = value);
-                    },
-                  ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   TextField(
-                    controller: reasonController,
+                    controller: noteController,
                     minLines: 2,
                     maxLines: 3,
                     decoration: InputDecoration(
-                      hintText: requiresText
-                          ? 'Enter reason details (required)'
-                          : 'Optional details',
+                      hintText: 'Optional note',
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                   ),
@@ -347,28 +1336,30 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: () {
-                        final details = reasonController.text.trim();
-                        if (requiresText && details.isEmpty) {
+                        if (selectedAction == _ExceptionAction.taken &&
+                            requireTakenNote &&
+                            noteController.text.trim().isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Please enter the skip reason.'),
+                              content: Text(
+                                'PRN administration requires a note/reason.',
+                              ),
                             ),
                           );
                           return;
                         }
 
-                        final reasonText = details.isEmpty
-                            ? defaultReason()
-                            : '${defaultReason()}: $details';
-
                         Navigator.of(context).pop(
-                          _SkipReasonResult(
-                            type: selectedType,
-                            reasonText: reasonText,
+                          _ExceptionDecision(
+                            action: selectedAction,
+                            reason: null,
+                            note: noteController.text.trim().isEmpty
+                                ? null
+                                : noteController.text.trim(),
                           ),
                         );
                       },
-                      child: const Text('Confirm Skip Reason'),
+                      child: const Text('Confirm'),
                     ),
                   ),
                 ],
@@ -380,493 +1371,853 @@ class _MedicationRoundScreenState extends State<MedicationRoundScreen> {
     );
   }
 
-  String _doseValueFor(DemoMedication medication) {
-    if (medication.doseValue != null) {
-      final value = medication.doseValue!;
-      final fixed = value.truncateToDouble() == value ? 1 : 2;
-      return value.toStringAsFixed(fixed);
+  Widget _actionChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      selectedColor: const Color(0xFF1C6CA1),
+      labelStyle: GoogleFonts.nunitoSans(
+        color: selected ? Colors.white : const Color(0xFF30505F),
+        fontWeight: FontWeight.w800,
+      ),
+      side: BorderSide(
+        color: selected ? const Color(0xFF1C6CA1) : const Color(0xFFD2E0E9),
+      ),
+    );
+  }
+
+  List<_AiSignal> _aiSignals(DemoMedication medication) {
+    final signals = <_AiSignal>[];
+    final result = _results[medication.orderId];
+    final followUp = _prnFollowUpDue[medication.orderId];
+
+    if (medication.prn) {
+      signals.add(
+        const _AiSignal(
+          icon: Icons.trending_up_rounded,
+          label: 'PRN trend rising',
+          tone: _SignalTone.warn,
+        ),
+      );
     }
-
-    final summary = _doseSummaryFor(medication);
-    final match = RegExp(r'\d+(?:\.\d+)?').firstMatch(summary);
-    return match?.group(0) ?? '1.0';
-  }
-
-  String _formatDate(DateTime value) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final day = value.day.toString().padLeft(2, '0');
-    return '$day-${months[value.month - 1]}-${value.year}';
-  }
-
-  String _formatTime(DateTime value) {
-    final hour = value.hour.toString().padLeft(2, '0');
-    final minute = value.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
-  }
-
-  List<DemoMedication> _medicationsForTab(String tab) {
-    return widget.medications.where((med) {
-      if (tab == 'PRN') {
-        return med.prn;
+    if (followUp != null) {
+      final now = DateTime.now();
+      final minutes = followUp.difference(now).inMinutes;
+      if (minutes <= 0) {
+        signals.add(
+          const _AiSignal(
+            icon: Icons.schedule_rounded,
+            label: 'Follow-up due',
+            tone: _SignalTone.info,
+          ),
+        );
+      } else {
+        signals.add(
+          _AiSignal(
+            icon: Icons.schedule_rounded,
+            label: 'Follow-up in ${minutes}m',
+            tone: _SignalTone.info,
+          ),
+        );
       }
-      if (med.prn) {
-        return false;
-      }
-      if (med.timingSlots.isNotEmpty) {
-        return med.timingSlots.contains(tab);
-      }
-
-      final fallbackIndex = med.orderId.hashCode.abs() % _regularTabs.length;
-      return _regularTabs[fallbackIndex] == tab;
-    }).toList();
+    }
+    if (medication.isControlledDrug ||
+        result?.status == RoundActionStatus.refused ||
+        result?.status == RoundActionStatus.withheld) {
+      signals.add(
+        const _AiSignal(
+          icon: Icons.warning_amber_rounded,
+          label: 'Review required',
+          tone: _SignalTone.danger,
+        ),
+      );
+    }
+    return signals;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFF6F9FB), Color(0xFFEDF3F8)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: SafeArea(
+    final due = _dueMedications;
+    final done = due.where((med) => _results.containsKey(med.orderId)).length;
+    final progress = due.isEmpty ? 1.0 : (done / due.length).clamp(0.0, 1.0);
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        Navigator.of(context).pop(_buildResult(autoAdvance: false));
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF4F8FB),
+        body: SafeArea(
           child: Column(
             children: [
-              _RoundHeader(
-                residentName: widget.residentName,
-                roomLabel: widget.roomLabel,
-                dateOfBirth: widget.dateOfBirth,
-                addressLine1: widget.addressLine1,
-                allergies: widget.allergies,
-                specialPreferences: widget.specialPreferences,
-              ),
-              const SizedBox(height: 10),
-              _ShiftTabs(
-                tabs: _tabs,
-                selectedIndex: _tabIndex,
-                onSelect: _selectTab,
-              ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEAF4FF),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF92BCE5)),
-                ),
-                child: Text(
-                  _timeWindows[_tabs[_tabIndex]] ?? '08:00 - 09:00',
-                  style: GoogleFonts.nunitoSans(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF145B93),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: _ChainModeStrip(
-                  enabled: _chainMode,
-                  selectedCount: _chainSelectedIds.length,
-                  onToggle: _toggleChainMode,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Expanded(
-                child: Builder(
-                  builder: (context) {
-                    final activeTab = _tabs[_tabIndex];
-                    final filtered = _medicationsForTab(activeTab);
-
-                    if (widget.medications.isEmpty) {
-                      return const Center(
-                        child: Text(
-                          'No active medication orders for this resident.',
-                        ),
-                      );
-                    }
-
-                    if (filtered.isEmpty) {
-                      return Center(
-                        child: Text(
-                          activeTab == 'PRN'
-                              ? 'No PRN medications for this resident.'
-                              : 'No medications scheduled for $activeTab.',
-                        ),
-                      );
-                    }
-
-                    return ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final medication = filtered[index];
-                        final expanded =
-                            _expandedMedicationId == medication.orderId;
-                        final selectedInChain = _chainSelectedIds.contains(
-                          medication.orderId,
-                        );
-                        return _MedicationCard(
-                          card: medication,
-                          activeWindow:
-                              _timeWindows[activeTab] ?? '08:00 - 09:00',
-                          expanded: _chainMode ? false : expanded,
-                          chainMode: _chainMode,
-                          chainSelected: selectedInChain,
-                          takenRecord: _takenByMedication[medication.orderId],
-                          skippedRecord:
-                              _skippedByMedication[medication.orderId],
-                          onTap: () => _chainMode
-                              ? _toggleChainSelection(medication)
-                              : _toggleMedication(medication),
-                          takePanel: (!_chainMode && expanded)
-                              ? _TakeMedicationPanel(
-                                  medication: medication,
-                                  dosageController: _dosageController,
-                                  noteController: _noteController,
-                                  selectedDateTime: _selectedDateTime,
-                                  onPickDate: _pickDate,
-                                  onPickTime: _pickTime,
-                                  onSkip: () => _handleSkip(medication),
-                                  onTake: () => _handleTake(medication),
-                                  onCollapse: () =>
-                                      _toggleMedication(medication),
-                                  formatDate: _formatDate,
-                                  formatTime: _formatTime,
-                                )
-                              : null,
-                        );
-                      },
-                    );
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                child: _ResidentHeader(
+                  residentName: widget.residentName,
+                  siteName: widget.siteName,
+                  dateOfBirth: widget.dateOfBirth,
+                  allergies: widget.allergies,
+                  roundLabel: widget.roundLabel,
+                  roundWindow: widget.roundWindow,
+                  progress: progress,
+                  bulkSelectionEnabled: _bulkSelectionEnabled,
+                  selectedCount: _selectedMedicationIds.length,
+                  totalSelectable: _pendingSelectableMedications().length,
+                  onToggleBulk: () {
+                    setState(() {
+                      _bulkSelectionEnabled = !_bulkSelectionEnabled;
+                      _selectedMedicationIds.clear();
+                    });
+                  },
+                  onStockCount: _openStockCountSheet,
+                  onSelectAll: _selectAllPending,
+                  onClearSelection: _clearSelection,
+                  onBack: () {
+                    Navigator.of(context).pop(_buildResult(autoAdvance: false));
                   },
                 ),
+              ),
+              if (!widget.prnOnlyMode)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: SegmentedButton<ResidentMedicationTab>(
+                          segments: [
+                            ButtonSegment<ResidentMedicationTab>(
+                              value: ResidentMedicationTab.scheduled,
+                              label: Text('Scheduled ($_scheduledTabCount)'),
+                            ),
+                            ButtonSegment<ResidentMedicationTab>(
+                              value: ResidentMedicationTab.prn,
+                              label: Text('PRN (${_allPrnMedications.length})'),
+                            ),
+                          ],
+                          selected: {_residentTab},
+                          onSelectionChanged: (selected) {
+                            setState(() {
+                              _residentTab = selected.first;
+                              _expandedMedicationId = null;
+                              _selectedMedicationIds.clear();
+                              _bulkSelectionEnabled = false;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Expanded(
+                child: _sortedMedications.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No medications due for this round.',
+                          style: GoogleFonts.nunitoSans(
+                            color: const Color(0xFF486371),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        controller: _listController,
+                        padding: const EdgeInsets.fromLTRB(12, 6, 12, 16),
+                        itemCount: _sortedMedications.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final medication = _sortedMedications[index];
+                          final result = _results[medication.orderId];
+                          final signals = _aiSignals(medication);
+                          return Dismissible(
+                            key: ValueKey('swipe-${medication.orderId}'),
+                            direction: result == null
+                                ? DismissDirection.horizontal
+                                : DismissDirection.none,
+                            confirmDismiss: (direction) =>
+                                _handleSwipeMedication(medication, direction),
+                            background: Container(
+                              alignment: Alignment.centerLeft,
+                              padding: const EdgeInsets.only(left: 16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE5F6EF),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Icon(
+                                Icons.swipe_right_rounded,
+                                color: Color(0xFF236C54),
+                              ),
+                            ),
+                            secondaryBackground: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFE7D8),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Icon(
+                                Icons.swipe_left_rounded,
+                                color: Color(0xFF8D4B1D),
+                              ),
+                            ),
+                            child: _MedicationExecutionCard(
+                              medication: medication,
+                              result: result,
+                              selected: _selectedMedicationIds.contains(
+                                medication.orderId,
+                              ),
+                              selectionMode: _bulkSelectionEnabled,
+                              overdue: _isOverdue(medication),
+                              highRisk: _isHighRisk(medication),
+                              expanded:
+                                  _expandedMedicationId == medication.orderId &&
+                                  result == null,
+                              doseInput:
+                                  _doseInputByOrder[medication.orderId] ??
+                                  _doseSummaryFor(medication),
+                              noteInput:
+                                  _noteInputByOrder[medication.orderId] ?? '',
+                              onDoseChanged: (value) {
+                                _doseInputByOrder[medication.orderId] = value;
+                              },
+                              onNoteChanged: (value) {
+                                _noteInputByOrder[medication.orderId] = value;
+                              },
+                              administrationTimeLabel: _formatTimeOfDay(
+                                _timeInputByOrder[medication.orderId] ??
+                                    TimeOfDay.now(),
+                              ),
+                              onPickAdministrationTime: () async {
+                                final picked = await _pickAdministrationTime(
+                                  initialTime:
+                                      _timeInputByOrder[medication.orderId] ??
+                                      TimeOfDay.now(),
+                                );
+                                if (picked == null || !mounted) return;
+                                setState(() {
+                                  _timeInputByOrder[medication.orderId] =
+                                      picked;
+                                });
+                              },
+                              onConfirmTaken: () => _confirmFromExpanded(
+                                medication,
+                                RoundActionStatus.taken,
+                              ),
+                              onConfirmRefused: () => _confirmFromExpanded(
+                                medication,
+                                RoundActionStatus.refused,
+                              ),
+                              onConfirmWithheld: () => _confirmFromExpanded(
+                                medication,
+                                RoundActionStatus.withheld,
+                              ),
+                              nextBest:
+                                  _nextBestOrderId == medication.orderId &&
+                                  result == null,
+                              aiSignals: signals,
+                              followUpDue: _prnFollowUpDue[medication.orderId],
+                              onTap: () => _handleTapMedication(medication),
+                              onLongPress: () =>
+                                  _openMedicationInfo(medication),
+                            ),
+                          );
+                        },
+                      ),
               ),
             ],
           ),
         ),
+        bottomNavigationBar: _selectedMedicationIds.isNotEmpty
+            ? _StickyActionBar(
+                selectedCount: _selectedMedicationIds.length,
+                onTaken: () => _applyBulkAction(_ExceptionAction.taken),
+                onRefused: () => _applyBulkAction(_ExceptionAction.refused),
+                onWithheld: () => _applyBulkAction(_ExceptionAction.withheld),
+              )
+            : null,
       ),
-      bottomNavigationBar: _chainMode
-          ? _ChainActionBar(
-              noteController: _chainNoteController,
-              selectedCount: _chainSelectedIds.length,
-              onMarkTaken: () => _applyChainAction(_ChainAction.taken),
-              onMarkRefused: () => _applyChainAction(_ChainAction.refused),
-            )
-          : null,
     );
   }
 }
 
-class _RoundHeader extends StatelessWidget {
-  const _RoundHeader({
+class _ResidentHeader extends StatelessWidget {
+  const _ResidentHeader({
     required this.residentName,
-    required this.roomLabel,
+    required this.siteName,
     required this.dateOfBirth,
-    required this.addressLine1,
     required this.allergies,
-    required this.specialPreferences,
+    required this.roundLabel,
+    required this.roundWindow,
+    required this.progress,
+    required this.bulkSelectionEnabled,
+    required this.selectedCount,
+    required this.totalSelectable,
+    required this.onToggleBulk,
+    required this.onStockCount,
+    required this.onSelectAll,
+    required this.onClearSelection,
+    required this.onBack,
   });
 
   final String residentName;
-  final String roomLabel;
+  final String siteName;
   final String? dateOfBirth;
-  final String? addressLine1;
   final String? allergies;
-  final List<String> specialPreferences;
+  final String roundLabel;
+  final String roundWindow;
+  final double progress;
+  final bool bulkSelectionEnabled;
+  final int selectedCount;
+  final int totalSelectable;
+  final VoidCallback onToggleBulk;
+  final VoidCallback onStockCount;
+  final VoidCallback onSelectAll;
+  final VoidCallback onClearSelection;
+  final VoidCallback onBack;
 
-  void _openResidentProfile(BuildContext context) {
-    final allergyText = allergies?.trim().isNotEmpty == true
-        ? allergies!.trim()
-        : 'No known allergies';
-    final preferences = specialPreferences.isEmpty
-        ? const ['No special preferences recorded']
-        : specialPreferences;
-
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(
-            '$residentName Profile',
-            style: GoogleFonts.nunitoSans(fontWeight: FontWeight.w900),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Allergies',
-                  style: GoogleFonts.nunitoSans(
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF274457),
-                  ),
-                ),
-                Text(
-                  allergyText,
-                  style: GoogleFonts.nunitoSans(
-                    color: const Color(0xFF496171),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'Medical conditions',
-                  style: GoogleFonts.nunitoSans(
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF274457),
-                  ),
-                ),
-                Text(
-                  'Not available in demo data',
-                  style: GoogleFonts.nunitoSans(
-                    color: const Color(0xFF496171),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'Special preferences',
-                  style: GoogleFonts.nunitoSans(
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF274457),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                ...preferences.map(
-                  (item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Text(
-                      '- $item',
+  @override
+  Widget build(BuildContext context) {
+    final hasAllergy = allergies?.trim().isNotEmpty == true;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFD5E3EC)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      residentName,
                       style: GoogleFonts.nunitoSans(
-                        color: const Color(0xFF496171),
-                        fontWeight: FontWeight.w700,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                        color: const Color(0xFF163447),
                       ),
                     ),
-                  ),
+                    Text(
+                      '${dateOfBirth?.trim().isNotEmpty == true ? dateOfBirth!.trim() : 'DOB not recorded'} · $siteName',
+                      style: GoogleFonts.nunitoSans(
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF5A7382),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+              TextButton.icon(
+                onPressed: onToggleBulk,
+                icon: Icon(
+                  bulkSelectionEnabled
+                      ? Icons.check_box_rounded
+                      : Icons.check_box_outline_blank_rounded,
+                ),
+                label: Text(bulkSelectionEnabled ? 'Selecting' : 'Select'),
+              ),
+            ],
+          ),
+          if (bulkSelectionEnabled)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                children: [
+                  Text(
+                    '$selectedCount selected',
+                    style: GoogleFonts.nunitoSans(
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF3F5D6C),
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: totalSelectable == 0 ? null : onSelectAll,
+                    child: Text('Select all ($totalSelectable)'),
+                  ),
+                  TextButton(
+                    onPressed: onClearSelection,
+                    child: const Text('Clear'),
+                  ),
+                ],
+              ),
+            ),
+          if (hasAllergy)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFEEE7),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFEFA77F)),
+              ),
+              child: Text(
+                'Allergy alert: ${allergies!.trim()}',
+                style: GoogleFonts.nunitoSans(
+                  color: const Color(0xFF8A3C1A),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          if (!hasAllergy)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF7F4),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFA5D4C2)),
+              ),
+              child: Text(
+                'No known allergies',
+                style: GoogleFonts.nunitoSans(
+                  color: const Color(0xFF245A43),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _headerBadge(
+                icon: Icons.schedule_rounded,
+                label: '$roundLabel Round · $roundWindow',
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: onStockCount,
+                icon: const Icon(Icons.inventory_2_outlined, size: 16),
+                label: const Text('Stock count'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 7,
+              backgroundColor: const Color(0xFFE4EEF4),
+              color: const Color(0xFF2F8E71),
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
   }
 
+  Widget _headerBadge({required IconData icon, required String label}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF3F8),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: const Color(0xFFCFE0EA)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: const Color(0xFF315365)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: GoogleFonts.nunitoSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF315365),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MedicationExecutionCard extends StatelessWidget {
+  const _MedicationExecutionCard({
+    required this.medication,
+    required this.result,
+    required this.selected,
+    required this.selectionMode,
+    required this.overdue,
+    required this.highRisk,
+    required this.expanded,
+    required this.doseInput,
+    required this.noteInput,
+    required this.onDoseChanged,
+    required this.onNoteChanged,
+    required this.administrationTimeLabel,
+    required this.onPickAdministrationTime,
+    required this.onConfirmTaken,
+    required this.onConfirmRefused,
+    required this.onConfirmWithheld,
+    required this.nextBest,
+    required this.aiSignals,
+    required this.followUpDue,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final DemoMedication medication;
+  final _MedicationResult? result;
+  final bool selected;
+  final bool selectionMode;
+  final bool overdue;
+  final bool highRisk;
+  final bool expanded;
+  final String doseInput;
+  final String noteInput;
+  final ValueChanged<String> onDoseChanged;
+  final ValueChanged<String> onNoteChanged;
+  final String administrationTimeLabel;
+  final VoidCallback onPickAdministrationTime;
+  final VoidCallback onConfirmTaken;
+  final VoidCallback onConfirmRefused;
+  final VoidCallback onConfirmWithheld;
+  final bool nextBest;
+  final List<_AiSignal> aiSignals;
+  final DateTime? followUpDue;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.arrow_back_rounded),
+    final state = _statusMeta(result?.status);
+    final borderColor = selected
+        ? const Color(0xFF1B6DA5)
+        : (nextBest ? const Color(0xFF2D7DAE) : state.borderColor);
+    final strength = medication.rawStrength?.trim();
+    final instructions = medication.instructions?.trim();
+    final instructionText = (instructions == null || instructions.isEmpty)
+        ? 'Instructions: none provided'
+        : 'Instructions: $instructions';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 94),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: borderColor),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0B1A2B33),
+                blurRadius: 8,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
-          const CircleAvatar(
-            radius: 19,
-            backgroundColor: Color(0xFFDDEAF4),
-            child: Icon(Icons.person_rounded, color: Color(0xFF315269)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  onTap: () => _openResidentProfile(context),
-                  child: Text(
-                    residentName,
-                    style: GoogleFonts.nunitoSans(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFF1A5EA0),
-                      decoration: TextDecoration.underline,
-                      decorationColor: const Color(0xFF1A5EA0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  if (selectionMode)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Icon(
+                        selected
+                            ? Icons.check_box_rounded
+                            : Icons.check_box_outline_blank_rounded,
+                        color: selected
+                            ? const Color(0xFF1B6DA5)
+                            : const Color(0xFF8AA0AE),
+                      ),
+                    ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              medication.medicationName,
+                              style: GoogleFonts.nunitoSans(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF173546),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(width: 8),
+                            _StatusPill(
+                              label: state.label,
+                              color: state.pillColor,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_doseSummaryFor(medication)} · ${medication.route?.trim().isNotEmpty == true ? medication.route!.trim() : 'Route n/a'}',
+                          style: GoogleFonts.nunitoSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF4E6978),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (strength != null && strength.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              'Strength: $strength',
+                              style: GoogleFonts.nunitoSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF5D7683),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            instructionText,
+                            style: GoogleFonts.nunitoSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF5D7683),
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            if (medication.prn)
+                              const _TinyBadge(
+                                label: 'PRN',
+                                background: Color(0xFFEFF4FD),
+                                foreground: Color(0xFF2E5E8E),
+                              ),
+                            if (nextBest)
+                              const _TinyBadge(
+                                label: 'Next',
+                                background: Color(0xFFE9F4FF),
+                                foreground: Color(0xFF2D7DAE),
+                              ),
+                            if (medication.isControlledDrug)
+                              const _TinyBadge(
+                                label: 'Controlled',
+                                background: Color(0xFFFFEFE5),
+                                foreground: Color(0xFF8D4B1D),
+                              ),
+                            if (highRisk)
+                              const _TinyBadge(
+                                label: 'High risk',
+                                background: Color(0xFFFFF2DA),
+                                foreground: Color(0xFF825600),
+                              ),
+                            if (overdue)
+                              const _TinyBadge(
+                                label: 'Overdue',
+                                background: Color(0xFFFFE8E8),
+                                foreground: Color(0xFF973838),
+                              ),
+                            if (followUpDue != null)
+                              _TinyBadge(
+                                label: _followUpLabel(followUpDue!),
+                                background: const Color(0xFFE9F4FF),
+                                foreground: const Color(0xFF2D5D8E),
+                              ),
+                          ],
+                        ),
+                        if (result?.note != null &&
+                            result!.note!.trim().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              'Note: ${result!.note!.trim()}',
+                              style: GoogleFonts.nunitoSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF436374),
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    aiSignals.any((s) => s.tone == _SignalTone.danger)
+                        ? Icons.priority_high_rounded
+                        : Icons.more_horiz_rounded,
+                    color: aiSignals.any((s) => s.tone == _SignalTone.danger)
+                        ? const Color(0xFFB44343)
+                        : const Color(0xFF6C8695),
+                  ),
+                ],
+              ),
+              if (expanded) ...[
+                const SizedBox(height: 8),
+                const Divider(height: 1, color: Color(0xFFD7E3EB)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Administration time: $administrationTimeLabel',
+                        style: GoogleFonts.nunitoSans(
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF365563),
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: onPickAdministrationTime,
+                      child: const Text('Set time'),
+                    ),
+                  ],
+                ),
+                TextFormField(
+                  initialValue: doseInput,
+                  onChanged: onDoseChanged,
+                  decoration: InputDecoration(
+                    labelText: 'Dose to administer',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  initialValue: noteInput,
+                  onChanged: onNoteChanged,
+                  minLines: 2,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: 'Optional note (appended to auto note)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                 ),
+                const SizedBox(height: 6),
                 Text(
-                  dateOfBirth?.trim().isNotEmpty == true
-                      ? 'DOB: ${dateOfBirth!.trim()} | Default'
-                      : 'DOB: Not recorded | Default',
+                  'Auto note is generated on administer and saved to MAR.',
                   style: GoogleFonts.nunitoSans(
-                    fontSize: 13,
-                    color: const Color(0xFF5B7282),
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
+                    color: const Color(0xFF5D7683),
                   ),
                 ),
-                Text(
-                  addressLine1?.trim().isNotEmpty == true
-                      ? 'Address: ${addressLine1!.trim()}'
-                      : 'Address: Not recorded',
-                  style: GoogleFonts.nunitoSans(
-                    fontSize: 14,
-                    color: const Color(0xFF5B7282),
-                    fontWeight: FontWeight.w700,
-                  ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: onConfirmTaken,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF2F8E71),
+                        ),
+                        child: const Text('Administer'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onConfirmRefused,
+                        child: const Text('Refused'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onConfirmWithheld,
+                        child: const Text('Withheld'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            ),
+            ],
           ),
-          Text(
-            roomLabel,
-            style: GoogleFonts.nunitoSans(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: const Color(0xFF3A5567),
-            ),
-          ),
-          IconButton(onPressed: () {}, icon: const Icon(Icons.refresh_rounded)),
-        ],
-      ),
-    );
-  }
-}
-
-class _ShiftTabs extends StatelessWidget {
-  const _ShiftTabs({
-    required this.tabs,
-    required this.selectedIndex,
-    required this.onSelect,
-  });
-
-  final List<String> tabs;
-  final int selectedIndex;
-  final ValueChanged<int> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        children: List.generate(tabs.length, (index) {
-          final selected = index == selectedIndex;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: GestureDetector(
-              onTap: () => onSelect(index),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: selected ? const Color(0xFF1B6DA5) : Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFD3E1EC)),
-                ),
-                child: Text(
-                  tabs[index],
-                  style: GoogleFonts.nunitoSans(
-                    color: selected ? Colors.white : const Color(0xFF294457),
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
-
-enum _ChainAction { taken, refused }
-
-class _ChainModeStrip extends StatelessWidget {
-  const _ChainModeStrip({
-    required this.enabled,
-    required this.selectedCount,
-    required this.onToggle,
-  });
-
-  final bool enabled;
-  final int selectedCount;
-  final VoidCallback onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: enabled ? const Color(0xFFE6F2FF) : Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: enabled ? const Color(0xFF8FB8DE) : const Color(0xFFD6E3EC),
         ),
       ),
-      child: Row(
-        children: [
-          Text(
-            enabled
-                ? 'Round chain enabled ($selectedCount selected)'
-                : 'Round chain disabled',
-            style: GoogleFonts.nunitoSans(
-              fontWeight: FontWeight.w800,
-              color: const Color(0xFF27485D),
-            ),
-          ),
-          const Spacer(),
-          OutlinedButton(
-            onPressed: onToggle,
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(
-                color: enabled
-                    ? const Color(0xFF1C6CA1)
-                    : const Color(0xFFA9BFD0),
-              ),
-            ),
-            child: Text(enabled ? 'Stop' : 'Start'),
-          ),
-        ],
-      ),
     );
+  }
+
+  _CardStatusMeta _statusMeta(RoundActionStatus? status) {
+    switch (status) {
+      case RoundActionStatus.taken:
+        return const _CardStatusMeta(
+          label: 'Taken',
+          borderColor: Color(0xFFB9E0D2),
+          pillColor: Color(0xFF2F8E71),
+        );
+      case RoundActionStatus.refused:
+        return const _CardStatusMeta(
+          label: 'Refused',
+          borderColor: Color(0xFFF0C9B0),
+          pillColor: Color(0xFFC2743D),
+        );
+      case RoundActionStatus.withheld:
+        return const _CardStatusMeta(
+          label: 'Withheld',
+          borderColor: Color(0xFFE7CBD0),
+          pillColor: Color(0xFFAA4F62),
+        );
+      case null:
+        return const _CardStatusMeta(
+          label: 'Pending',
+          borderColor: Color(0xFFD5E3EC),
+          pillColor: Color(0xFF4F6D7D),
+        );
+    }
+  }
+
+  String _followUpLabel(DateTime followUpDue) {
+    final mins = followUpDue.difference(DateTime.now()).inMinutes;
+    if (mins <= 0) return 'Follow-up due';
+    return 'Follow-up ${mins}m';
   }
 }
 
-class _ChainActionBar extends StatelessWidget {
-  const _ChainActionBar({
-    required this.noteController,
+class _StickyActionBar extends StatelessWidget {
+  const _StickyActionBar({
     required this.selectedCount,
-    required this.onMarkTaken,
-    required this.onMarkRefused,
+    required this.onTaken,
+    required this.onRefused,
+    required this.onWithheld,
   });
 
-  final TextEditingController noteController;
   final int selectedCount;
-  final Future<void> Function() onMarkTaken;
-  final Future<void> Function() onMarkRefused;
+  final VoidCallback onTaken;
+  final VoidCallback onRefused;
+  final VoidCallback onWithheld;
 
   @override
   Widget build(BuildContext context) {
@@ -876,50 +2227,43 @@ class _ChainActionBar extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         decoration: const BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFD5E1EA))),
+          border: Border(top: BorderSide(color: Color(0xFFD3E0E9))),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Chain round: $selectedCount selected',
+              'Selected: $selectedCount meds',
               style: GoogleFonts.nunitoSans(
                 fontWeight: FontWeight.w900,
-                color: const Color(0xFF26485D),
-              ),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: noteController,
-              minLines: 1,
-              maxLines: 2,
-              decoration: InputDecoration(
-                hintText: 'General note (required)',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                isDense: true,
+                color: const Color(0xFF234456),
               ),
             ),
             const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      onMarkRefused();
-                    },
-                    child: const Text('Mark Refused'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
                   child: FilledButton(
-                    onPressed: () {
-                      onMarkTaken();
-                    },
-                    child: const Text('Mark Taken'),
+                    onPressed: onTaken,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF2F8E71),
+                    ),
+                    child: const Text('Taken'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onRefused,
+                    child: const Text('Refused'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onWithheld,
+                    child: const Text('Withheld'),
                   ),
                 ),
               ],
@@ -931,732 +2275,180 @@ class _ChainActionBar extends StatelessWidget {
   }
 }
 
-String _doseSummaryFor(DemoMedication medication) {
-  final dose = medication.doseValue == null
-      ? ''
-      : medication.doseValue!.toStringAsFixed(
-          medication.doseValue!.truncateToDouble() == medication.doseValue
-              ? 0
-              : 1,
-        );
-  final amount = [
-    dose,
-    medication.doseUnit ?? '',
-  ].where((part) => part.isNotEmpty).join(' ');
-  if (medication.doseText?.trim().isNotEmpty == true) {
-    return medication.doseText!.trim();
-  }
-  return amount.isEmpty ? 'Dose not specified' : amount;
-}
-
-String _timingSummaryFor(DemoMedication medication) {
-  if (medication.timingTimes.isNotEmpty) {
-    return medication.timingTimes.join(', ');
-  }
-  if (medication.frequency?.trim().isNotEmpty == true) {
-    return medication.frequency!.trim();
-  }
-  return 'No timing text';
-}
-
-String _lastTakenFor(DemoMedication medication) {
-  final hash = medication.orderId.hashCode.abs();
-  final hours = 1 + (hash % 23);
-  final minutes = (hash ~/ 23) % 60;
-  return 'Last Taken: ${hours}h ${minutes}m ago';
-}
-
-String _clockTime(DateTime value) {
-  final hour = value.hour.toString().padLeft(2, '0');
-  final minute = value.minute.toString().padLeft(2, '0');
-  return '$hour:$minute';
-}
-
-enum _SkipReasonType { refused, outOfService, other }
-
-class _SkipReasonResult {
-  const _SkipReasonResult({required this.type, required this.reasonText});
-
-  final _SkipReasonType type;
-  final String reasonText;
-}
-
-class _TakenRecord {
-  const _TakenRecord({
-    required this.administeredAt,
-    required this.administeredBy,
-    required this.note,
-  });
-
-  final DateTime administeredAt;
-  final String administeredBy;
-  final String note;
-}
-
-class _SkippedRecord {
-  const _SkippedRecord({
-    required this.skippedAt,
-    required this.skippedBy,
-    required this.reasonType,
-    required this.reasonText,
-  });
-
-  final DateTime skippedAt;
-  final String skippedBy;
-  final _SkipReasonType reasonType;
-  final String reasonText;
-}
-
-class _SkipReasonOption extends StatelessWidget {
-  const _SkipReasonOption({
-    required this.label,
-    required this.value,
-    required this.groupValue,
-    required this.onChanged,
-  });
-
-  final String label;
-  final _SkipReasonType value;
-  final _SkipReasonType groupValue;
-  final ValueChanged<_SkipReasonType?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return RadioListTile<_SkipReasonType>(
-      value: value,
-      groupValue: groupValue,
-      contentPadding: EdgeInsets.zero,
-      dense: true,
-      title: Text(
-        label,
-        style: GoogleFonts.nunitoSans(
-          fontWeight: FontWeight.w800,
-          color: const Color(0xFF2A4454),
-        ),
-      ),
-      onChanged: onChanged,
-    );
-  }
-}
-
-class _MedicationCard extends StatelessWidget {
-  const _MedicationCard({
-    required this.card,
-    required this.activeWindow,
-    required this.expanded,
-    required this.chainMode,
-    required this.chainSelected,
-    required this.takenRecord,
-    required this.skippedRecord,
-    required this.onTap,
-    this.takePanel,
-  });
-
-  final DemoMedication card;
-  final String activeWindow;
-  final bool expanded;
-  final bool chainMode;
-  final bool chainSelected;
-  final _TakenRecord? takenRecord;
-  final _SkippedRecord? skippedRecord;
-  final VoidCallback onTap;
-  final Widget? takePanel;
-
-  @override
-  Widget build(BuildContext context) {
-    final doseSummary = _doseSummaryFor(card);
-    final timingSummary = _timingSummaryFor(card);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: expanded
-                  ? const Color(0xFF79AAD3)
-                  : const Color(0xFFD9E5EE),
-            ),
-            boxShadow: expanded
-                ? const [
-                    BoxShadow(
-                      color: Color(0x1A1C6CA1),
-                      blurRadius: 16,
-                      offset: Offset(0, 6),
-                    ),
-                  ]
-                : const [],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (chainMode)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Icon(
-                        chainSelected
-                            ? Icons.check_box_rounded
-                            : Icons.check_box_outline_blank_rounded,
-                        color: chainSelected
-                            ? const Color(0xFF1C6CA1)
-                            : const Color(0xFF7B93A4),
-                      ),
-                    ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEAF4FF),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFFC7DDF1)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.calendar_month_rounded,
-                          size: 15,
-                          color: Color(0xFF1C6CA1),
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          'Scheduled $activeWindow',
-                          style: GoogleFonts.nunitoSans(
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF255A84),
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Spacer(),
-                  if (!chainMode)
-                    Icon(
-                      expanded
-                          ? Icons.keyboard_arrow_up_rounded
-                          : Icons.keyboard_arrow_down_rounded,
-                      color: const Color(0xFF4D687A),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                card.medicationName,
-                style: GoogleFonts.nunitoSans(
-                  fontSize: 29,
-                  fontWeight: FontWeight.w900,
-                  color: const Color(0xFF112B3A),
-                ),
-              ),
-              const SizedBox(height: 3),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      doseSummary,
-                      style: GoogleFonts.nunitoSans(
-                        fontSize: 14,
-                        color: const Color(0xFF4E6675),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    'More Info',
-                    style: GoogleFonts.nunitoSans(
-                      color: const Color(0xFF546F80),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 7),
-              Row(
-                children: [
-                  Text(
-                    'To be taken: 1',
-                    style: GoogleFonts.nunitoSans(
-                      fontSize: 14,
-                      color: const Color(0xFF304A5A),
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2D9AEB),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      _lastTakenFor(card),
-                      style: GoogleFonts.nunitoSans(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              Text(
-                'Timing: $timingSummary',
-                style: GoogleFonts.nunitoSans(
-                  fontSize: 13,
-                  color: const Color(0xFF5A7281),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              if (card.route?.isNotEmpty == true || card.isControlledDrug) ...[
-                const SizedBox(height: 5),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if (card.route?.isNotEmpty == true)
-                      _PillLabel(
-                        label: card.route!,
-                        color: const Color(0xFFEFF5FA),
-                        textColor: const Color(0xFF385566),
-                      ),
-                    if (card.isControlledDrug)
-                      const _PillLabel(
-                        label: 'Controlled Drug',
-                        color: Color(0xFFFDF0E4),
-                        textColor: Color(0xFF8C4B1E),
-                      ),
-                  ],
-                ),
-              ],
-              if (takePanel != null) ...[
-                const SizedBox(height: 12),
-                const Divider(height: 1, color: Color(0xFFDCE6EE)),
-                const SizedBox(height: 10),
-                takePanel!,
-              ],
-              if (takenRecord != null || skippedRecord != null) ...[
-                const SizedBox(height: 12),
-                const Divider(height: 1, color: Color(0xFFDCE6EE)),
-                const SizedBox(height: 8),
-                if (takenRecord != null)
-                  Text(
-                    'Administered at ${_clockTime(takenRecord!.administeredAt)} by ${takenRecord!.administeredBy}',
-                    style: GoogleFonts.nunitoSans(
-                      fontSize: 13,
-                      color: const Color(0xFF2E6A4D),
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                if (takenRecord != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Note: ${takenRecord!.note}',
-                    style: GoogleFonts.nunitoSans(
-                      fontSize: 13,
-                      color: const Color(0xFF3E5D4D),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-                if (skippedRecord != null)
-                  Text(
-                    'Skipped at ${_clockTime(skippedRecord!.skippedAt)} by ${skippedRecord!.skippedBy} - ${skippedRecord!.reasonText}',
-                    style: GoogleFonts.nunitoSans(
-                      fontSize: 13,
-                      color: const Color(0xFF7A592D),
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TakeMedicationPanel extends StatelessWidget {
-  const _TakeMedicationPanel({
-    required this.medication,
-    required this.dosageController,
-    required this.noteController,
-    required this.selectedDateTime,
-    required this.onPickDate,
-    required this.onPickTime,
-    required this.onSkip,
-    required this.onTake,
-    required this.onCollapse,
-    required this.formatDate,
-    required this.formatTime,
-  });
-
-  final DemoMedication medication;
-  final TextEditingController dosageController;
-  final TextEditingController noteController;
-  final DateTime selectedDateTime;
-  final Future<void> Function() onPickDate;
-  final Future<void> Function() onPickTime;
-  final Future<void> Function() onSkip;
-  final Future<void> Function() onTake;
-  final VoidCallback onCollapse;
-  final String Function(DateTime value) formatDate;
-  final String Function(DateTime value) formatTime;
-
-  @override
-  Widget build(BuildContext context) {
-    final helperText = medication.instructions?.trim().isNotEmpty == true
-        ? medication.instructions!.trim()
-        : 'Take ${_doseSummaryFor(medication).toLowerCase()}';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Center(
-          child: Text(
-            'Take Medication',
-            style: GoogleFonts.nunitoSans(
-              fontSize: 23,
-              fontWeight: FontWeight.w800,
-              color: const Color(0xFF1C3444),
-            ),
-          ),
-        ),
-        const SizedBox(height: 2),
-        Center(
-          child: Text(
-            '(All fields marked with * are mandatory)',
-            style: GoogleFonts.nunitoSans(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFFC2778A),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Dosage *',
-          style: GoogleFonts.nunitoSans(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: const Color(0xFF243B4B),
-          ),
-        ),
-        const SizedBox(height: 6),
-        SizedBox(
-          width: 170,
-          child: TextField(
-            controller: dosageController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              isDense: true,
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: Color(0xFFD3DEE8)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: Color(0xFFD3DEE8)),
-              ),
-            ),
-            style: GoogleFonts.nunitoSans(
-              fontSize: 19,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFF263F50),
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          '($helperText)',
-          style: GoogleFonts.nunitoSans(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFF6A7E8C),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFFD3DEE8)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Route of Administration',
-                style: GoogleFonts.nunitoSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: const Color(0xFF253E4D),
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                medication.route?.trim().isNotEmpty == true
-                    ? medication.route!.trim()
-                    : 'Oral',
-                style: GoogleFonts.nunitoSans(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF2D4B5D),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Date and Time',
-          style: GoogleFonts.nunitoSans(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: const Color(0xFF243B4B),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFFD3DEE8)),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  onTap: onPickDate,
-                  borderRadius: BorderRadius.circular(6),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 11,
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.calendar_today_rounded,
-                          size: 16,
-                          color: Color(0xFF556C7A),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          formatDate(selectedDateTime),
-                          style: GoogleFonts.nunitoSans(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF2C4656),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              Container(width: 1, height: 24, color: const Color(0xFFDCE6EE)),
-              Expanded(
-                child: InkWell(
-                  onTap: onPickTime,
-                  borderRadius: BorderRadius.circular(6),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 11,
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.access_time_rounded,
-                          size: 17,
-                          color: Color(0xFF556C7A),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          formatTime(selectedDateTime),
-                          style: GoogleFonts.nunitoSans(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF2C4656),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              IconButton(
-                onPressed: onPickTime,
-                icon: const Icon(
-                  Icons.edit_outlined,
-                  size: 18,
-                  color: Color(0xFF566D7C),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Text(
-              'Note *',
-              style: GoogleFonts.nunitoSans(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: const Color(0xFF243B4B),
-              ),
-            ),
-            const Spacer(),
-            InkWell(
-              onTap: onCollapse,
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFFBACAD6)),
-                ),
-                child: const Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  color: Color(0xFF5B7383),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: noteController,
-          minLines: 2,
-          maxLines: 3,
-          decoration: InputDecoration(
-            hintText: 'Add note',
-            hintStyle: GoogleFonts.nunitoSans(
-              color: const Color(0xFF92A4B1),
-              fontWeight: FontWeight.w700,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFD3DEE8)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFD3DEE8)),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () {
-                  onSkip();
-                },
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: const BorderSide(color: Color(0xFFA8BBC9)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                ),
-                child: Text(
-                  'Skip',
-                  style: GoogleFonts.nunitoSans(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF395260),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(30),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFC4A7E9), Color(0xFFB58CE6)],
-                  ),
-                ),
-                child: FilledButton(
-                  onPressed: () {
-                    onTake();
-                  },
-                  style: FilledButton.styleFrom(
-                    shadowColor: Colors.transparent,
-                    backgroundColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  child: Text(
-                    'Take',
-                    style: GoogleFonts.nunitoSans(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _PillLabel extends StatelessWidget {
-  const _PillLabel({
-    required this.label,
-    required this.color,
-    required this.textColor,
-  });
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.label, required this.color});
 
   final String label;
   final Color color;
-  final Color textColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
         style: GoogleFonts.nunitoSans(
-          fontWeight: FontWeight.w800,
-          color: textColor,
-          fontSize: 12,
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
         ),
       ),
     );
   }
+}
+
+class _TinyBadge extends StatelessWidget {
+  const _TinyBadge({
+    required this.label,
+    required this.background,
+    required this.foreground,
+  });
+
+  final String label;
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.nunitoSans(
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+          color: foreground,
+        ),
+      ),
+    );
+  }
+}
+
+class _SignalBadge extends StatelessWidget {
+  const _SignalBadge({
+    required this.icon,
+    required this.label,
+    required this.tone,
+  });
+
+  final IconData icon;
+  final String label;
+  final _SignalTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    Color background;
+    Color foreground;
+    switch (tone) {
+      case _SignalTone.info:
+        background = const Color(0xFFE8F3FF);
+        foreground = const Color(0xFF2D5D8E);
+        break;
+      case _SignalTone.warn:
+        background = const Color(0xFFFFF2DA);
+        foreground = const Color(0xFF825600);
+        break;
+      case _SignalTone.danger:
+        background = const Color(0xFFFFE8E8);
+        foreground = const Color(0xFF973838);
+        break;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: foreground),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: GoogleFonts.nunitoSans(
+              color: foreground,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CardStatusMeta {
+  const _CardStatusMeta({
+    required this.label,
+    required this.borderColor,
+    required this.pillColor,
+  });
+
+  final String label;
+  final Color borderColor;
+  final Color pillColor;
+}
+
+class _MedicationResult {
+  const _MedicationResult({
+    required this.status,
+    required this.timestamp,
+    required this.note,
+    required this.reason,
+  });
+
+  final RoundActionStatus status;
+  final DateTime timestamp;
+  final String? note;
+  final String? reason;
+}
+
+enum _ExceptionAction { taken, refused, withheld }
+
+class _ExceptionDecision {
+  const _ExceptionDecision({
+    required this.action,
+    required this.reason,
+    required this.note,
+  });
+
+  final _ExceptionAction action;
+  final String? reason;
+  final String? note;
+}
+
+enum _SignalTone { info, warn, danger }
+
+class _AiSignal {
+  const _AiSignal({
+    required this.icon,
+    required this.label,
+    required this.tone,
+  });
+
+  final IconData icon;
+  final String label;
+  final _SignalTone tone;
+}
+
+String _doseSummaryFor(DemoMedication medication) {
+  if (medication.doseText?.trim().isNotEmpty == true) {
+    return medication.doseText!.trim();
+  }
+  final dose = medication.doseValue;
+  if (dose == null) return 'Dose not specified';
+  final formatted = dose.toStringAsFixed(
+    dose.truncateToDouble() == dose ? 0 : 1,
+  );
+  final unit = medication.doseUnit?.trim() ?? '';
+  if (unit.isEmpty) return formatted;
+  return '$formatted $unit';
 }

@@ -177,6 +177,7 @@ class DemoMedication {
     required this.prn,
     required this.isControlledDrug,
     required this.frequency,
+    required this.scheduledTimes,
     required this.timingSlots,
     required this.timingTimes,
     required this.status,
@@ -194,6 +195,7 @@ class DemoMedication {
   final bool prn;
   final bool isControlledDrug;
   final String? frequency;
+  final List<String> scheduledTimes;
   final List<String> timingSlots;
   final List<String> timingTimes;
   final String status;
@@ -212,6 +214,9 @@ class DemoMedication {
       prn: json['prn'] as bool? ?? false,
       isControlledDrug: json['is_controlled_drug'] as bool? ?? false,
       frequency: json['frequency'] as String?,
+      scheduledTimes: (json['scheduled_times'] as List<dynamic>? ?? const [])
+          .map((e) => e.toString())
+          .toList(),
       timingSlots: (json['timing_slots'] as List<dynamic>? ?? const [])
           .map((e) => e.toString())
           .toList(),

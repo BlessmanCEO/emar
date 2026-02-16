@@ -127,6 +127,28 @@ class AppDatabase extends _$AppDatabase {
     return _mobayResidentIds.contains(residentId) ? 'Mobay' : 'Goldthorn Home';
   }
 
+  static String roundKeyFor(DateTime now, int roundIndex) {
+    final date =
+        '${now.year.toString().padLeft(4, '0')}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    return '$date-r$roundIndex';
+  }
+
+  static String administrationIdForRound({
+    required String residentId,
+    required String orderId,
+    required String roundKey,
+  }) {
+    return 'adm-$residentId-$orderId-$roundKey';
+  }
+
+  static String marEntryIdForRound({
+    required String residentId,
+    required String orderId,
+    required String roundKey,
+  }) {
+    return 'round:$roundKey:$residentId:$orderId';
+  }
+
   @override
   int get schemaVersion => 1;
 
@@ -253,6 +275,80 @@ class AppDatabase extends _$AppDatabase {
           ..where((row) => row.status.equals('active'))
           ..orderBy([(row) => OrderingTerm(expression: row.medicationName)]))
         .get();
+  }
+
+  Future<List<Administration>> getAdministrationsForRoundKey(
+    String roundKey,
+  ) async {
+    final prefix = 'round:$roundKey:%';
+    return (select(
+      administrations,
+    )..where((row) => row.marEntryId.like(prefix))).get();
+  }
+
+  Future<void> recordRoundAction({
+    required String orgId,
+    required String actorUserId,
+    required String deviceId,
+    required String residentId,
+    required String orderId,
+    required String roundKey,
+    required String status,
+    String? reasonCode,
+    String? notes,
+    required DateTime occurredAt,
+    String? siteId,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final administrationId = administrationIdForRound(
+      residentId: residentId,
+      orderId: orderId,
+      roundKey: roundKey,
+    );
+    final marEntryId = marEntryIdForRound(
+      residentId: residentId,
+      orderId: orderId,
+      roundKey: roundKey,
+    );
+
+    await into(administrations).insertOnConflictUpdate(
+      AdministrationsCompanion(
+        administrationId: Value(administrationId),
+        orgId: Value(orgId),
+        residentId: Value(residentId),
+        orderId: Value(orderId),
+        marEntryId: Value(marEntryId),
+        administeredAt: Value(occurredAt.millisecondsSinceEpoch),
+        status: Value(status),
+        reasonCode: Value(reasonCode),
+        notes: Value(notes),
+        updatedAt: Value(now),
+      ),
+    );
+
+    final eventId =
+        '$administrationId:${occurredAt.microsecondsSinceEpoch}:$status';
+    await enqueueEvent(
+      eventId: eventId,
+      orgId: orgId,
+      siteId: siteId,
+      actorUserId: actorUserId,
+      deviceId: deviceId,
+      eventType: 'AdministrationRecorded',
+      entityType: 'administration',
+      entityId: administrationId,
+      occurredAt: occurredAt,
+      payload: {
+        'resident_id': residentId,
+        'order_id': orderId,
+        'mar_entry_id': marEntryId,
+        'administered_at': occurredAt.millisecondsSinceEpoch,
+        'status': status,
+        'reason_code': reasonCode,
+        'notes': notes,
+        'round_key': roundKey,
+      },
+    );
   }
 
   Future<void> seedDummyClinicalDataIfEmpty() async {
